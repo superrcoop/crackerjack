@@ -137,18 +137,7 @@ def main(args):
         if args['-b']:
             return
         return
-    
-
-        #plaintext pasword input file
-    """load_words(salt)
-    entered_pw_hash = crypt.crypt(raw_input('Type a password: '), salt)
-    try:
-        f= open("passwords.txt","a+")
-        f.write(entered_pw_hash+"\n")
-    except Exception as e:
-        return str(e)
-    comparepwd()
-    f.close()"""
+  
     return
     
 
