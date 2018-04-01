@@ -1,0 +1,5 @@
+bcrypt==3.1.4
+cffi==1.11.5
+docopt==0.6.2
+pycparser==2.18
+six==1.11.0
