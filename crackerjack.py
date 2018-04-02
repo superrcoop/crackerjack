@@ -1,4 +1,5 @@
 #!/usr/bin/env python
+# -*- coding: utf-8 -*-
 
 """Crackerjack
 
@@ -22,10 +23,11 @@ Options:
 
 """
 import logging,time
-import json,os
+import json,os,sys
 import bcrypt
 from docopt import docopt
 from re import compile
+from time import sleep
 
 #Commonly used regex for accepting passwords across websites forms
 HARD_REGEX = compile(r'^(?=.*[a-z])(?=.*[A-Z])(?=.*[0-9])(?=.*[!@#\$%\^&])(?=.{9,})')
@@ -65,7 +67,7 @@ def timeit(method):
             name = kw.get('log_name', method.__name__.upper())
             kw['log_time'][name] = int((te - ts) * 1000)
         else:
-            print 'Time taken in module %r = %2.2f ms' % \
+            print '\nTime taken in module %r = %2.2f ms' % \
                   (method.__name__, (te - ts) * 1000)
         return result
     return timed
@@ -112,6 +114,20 @@ def load_h_words():
     finally:
         ff.close()
 
+def progress(count, total, status='Attempting to crack password'):
+    """Print a progress bar while password if being cracked
+  
+    """
+    bar_len = 60
+    filled_len = int(round(bar_len * count / float(total)))
+    percents = round(100.0 * count / float(total), 1)
+    bar = '█' * filled_len + '-' * (bar_len - filled_len)
+    sys.stdout.write('[%s] %s%s ... %s\r' % (bar, percents, '%', status))
+    if count == total:
+        sys.stdout.write('\n')
+    sys.stdout.flush()
+   
+
 def load_e_words():
     """Fetches words from a simple word dictionary.
 
@@ -143,13 +159,16 @@ def comparepwd(hash_password,dictionary):
     Returns:
         If identified returns the plaintext word for the hash else, not found. 
     """
-    
-    for word in dictionary:
-        if hash_password==hash_password(word):
-            print "Match found , password_hash = "+hash_password+" = "+word
-        else:
-            print "No Match"
-    
+    total=100
+    i=0
+    while i < total:
+        progress(i, total)
+        for word in dictionary:
+            i+=1
+            if hash_password==word:
+                print "Match found , password_hash = "+hash_password+" = "+word
+
+        
 @timeit
 def main(args):
     if args['<plaintext_password>']:
@@ -186,4 +205,7 @@ def main(args):
 if __name__ == '__main__':
     args = docopt(__doc__, version='Crackerjack 2.0')
     main(args)
+    
+    
+
  
