@@ -1,4 +1,4 @@
-#!/usr/bin/python
+#!/usr/bin/env python
 
 """Crackerjack
 
@@ -29,19 +29,18 @@ import bcrypt
 from docopt import docopt
 from re import compile
 
-CHAR = "1234567890!@#$%^&*"
 HARD_REGEX = compile(r'^(?=.*[a-z])(?=.*[A-Z])(?=.*[0-9])(?=.*[!@#\$%\^&])(?=.{8,})')
 MEDIUM_REGEX = compile(r'^(((?=.*[a-z])(?=.*[A-Z]))|((?=.*[a-z])(?=.*[0-9]))|((?=.*[A-Z])(?=.*[0-9])))(?=.{6,})')
 
 def hash_password(plain_password):
     return bcrypt.hashpw(plain_password,bcrypt.gensalt())
 
-def hardPassword(password): 
+def hard_password(password): 
     if not HARD_REGEX.match(password): 
         return False
     return True
 
-def mediumPassword(password): 
+def medium_password(password): 
     if not MEDIUM_REGEX.match(password): 
         return False
     return True
@@ -82,7 +81,34 @@ def load_h_words():
     return
 
 def load_e_words(inputfile=None):
-    #load words from .json and create hash_words.txt file
+     """Fetches rows from a Bigtable.
+
+    Retrieves rows pertaining to the given keys from the Table instance
+    represented by big_table.  Silly things may happen if
+    other_silly_variable is not None.
+
+    Args:
+        big_table: An open Bigtable Table instance.
+        keys: A sequence of strings representing the key of each table row
+            to fetch.
+        other_silly_variable: Another optional variable, that has a much
+            longer name than the other args, and which does nothing.
+
+    Returns:
+        A dict mapping keys to the corresponding table row data
+        fetched. Each row is represented as a tuple of strings. For
+        example:
+
+        {'Serak': ('Rigel VII', 'Preparer'),
+         'Zim': ('Irk', 'Invader'),
+         'Lrrr': ('Omicron Persei 8', 'Emperor')}
+
+        If a key from the keys argument is missing from the dictionary,
+        then that row was not found in the table.
+
+    Raises:
+        IOError: An error occurred accessing the bigtable.Table object.
+    """
     try:
         filename = os.path.dirname(sys.argv[0])+"data/words_dictionary.json"
         with open(filename,"r") as english_dictionary:
@@ -92,9 +118,11 @@ def load_e_words(inputfile=None):
             for key in valid_words:
                 hash_key=hash_password(key.encode('utf-8'))
                 ff.write(hash_key+"\n")
-            ff.close()
     except Exception as e:
         logging.exception("message")
+        print str(e)
+    finally:
+        ff.close()
 
 def comparepwd():
     #compare hash passwords with hash dictionary
@@ -139,8 +167,6 @@ def main(args):
         return
   
     return
-    
-
 
 if __name__ == '__main__':
     args = docopt(__doc__, version='Crackerjack 2.0')

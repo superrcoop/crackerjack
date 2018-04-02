@@ -1,10 +1,7 @@
 CrackerJack Hacking Tool
 =======================
 
-Description
--------------------
-
-Simple password cracker written in python using bcrypt
+Python bcrypt Hybrid + dictionary password cracking tool
 
 Getting Started !
 -------------------
