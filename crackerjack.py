@@ -3,7 +3,7 @@
 
 """Crackerjack
 
-Usage: 
+Usage:
     crackerjack.py <plaintext_password>...
     crackerjack.py (-b) [-m ] [-d ] <hashed_password>...
     crackerjack.py (-f | --file) [-b] <path/to/password_list.txt>
@@ -13,11 +13,11 @@ Usage:
 Options:
     -h --help       Show options.
     -v --version    Show version.
-    -b              Indicates a bcrypt hash password       
-    -m --med        Password can be alphanumeric with atleast 1 upper and\or 
+    -b              Indicates a bcrypt hash password
+    -m --med        Password can be alphanumeric with atleast 1 upper and\or
                     lowercase letter and atleast 6 characters long. e.g  -m Pencil1.
     -d --diff       Password must be of length 9, contain at least 1 upper,
-                    lower alphanumeric character and a special character 
+                    lower alphanumeric character and a special character
                     (a-z,A-Z,0-9,!@#\$%\^&) e.g -d P@ssw0rd#% .
     -f --file       Accepts a file with a list of passwords e.g. -f /path/to/password_list.txt.
 
@@ -33,13 +33,13 @@ from time import sleep
 HARD_REGEX = compile(r'^(?=.*[a-z])(?=.*[A-Z])(?=.*[0-9])(?=.*[!@#\$%\^&])(?=.{9,})')
 MEDIUM_REGEX = compile(r'^(((?=.*[a-z])(?=.*[A-Z]))|((?=.*[a-z])(?=.*[0-9]))|((?=.*[A-Z])(?=.*[0-9])))(?=.{6,})')
 
-def hard_regex(password): 
-    if HARD_REGEX.match(password): 
+def hard_regex(password):
+    if HARD_REGEX.match(password):
         return True
     return False
 
-def medium_regex(password): 
-    if MEDIUM_REGEX.match(password): 
+def medium_regex(password):
+    if MEDIUM_REGEX.match(password):
         return True
     return False
 
@@ -51,10 +51,27 @@ def check_password(password,hashed):
         return True
     return False
 
+def extract_words_from_file(filename):
+    """Fetches words from a text file.
+
+    Identify words inside a text file. Remove new line character.
+
+    Returns:
+        List of file words
+    """
+    try:
+        with open(filename, 'r') as file:
+            lines = [line.strip("\n") for line in file]
+            file.close()
+            return lines
+    except Exception as e:
+        print str(e)
+
+
 def verify_hash(hash):
-    """The prefix "$2a$" or "$2b$" (or "$2y$") 
-    in a hash string in a shadow password file 
-    indicates that hash string is a bcrypt hash 
+    """The prefix "$2a$" or "$2b$" (or "$2y$")
+    in a hash string in a shadow password file
+    indicates that hash string is a bcrypt hash
     in modular crypt format."""
     return
 
@@ -75,9 +92,9 @@ def timeit(method):
 def load_m_words():
     """Fetches words from a simple word dictionary.
 
-    Files contains dictionary words plus some of the most common passwords 
-    captured from rockyou. No string manipulation occured. 
-    Only for words matching the simplest regular expression. 
+    Files contains dictionary words plus some of the most common passwords
+    captured from rockyou. No string manipulation occured.
+    Only for words matching the simplest regular expression.
 
     Returns:
         A text file with hashed words from the dictionary
@@ -96,9 +113,9 @@ def load_m_words():
 def load_h_words():
     """Fetches words from a simple word dictionary.
 
-    Files contains dictionary words plus some of the most common passwords 
-    captured from rockyou. No string manipulation occured. 
-    Only for words matching the simplest regular expression. 
+    Files contains dictionary words plus some of the most common passwords
+    captured from rockyou. No string manipulation occured.
+    Only for words matching the simplest regular expression.
 
     Returns:
         A text file with hashed words from the dictionary
@@ -116,7 +133,7 @@ def load_h_words():
 
 def progress(count, total, status='Attempting to crack password'):
     """Print a progress bar while password if being cracked
-  
+
     """
     bar_len = 60
     filled_len = int(round(bar_len * count / float(total)))
@@ -126,14 +143,14 @@ def progress(count, total, status='Attempting to crack password'):
     if count == total:
         sys.stdout.write('\n')
     sys.stdout.flush()
-   
+
 
 def load_e_words():
     """Fetches words from a simple word dictionary.
 
-    Files contains dictionary words plus some of the most common passwords 
-    captured from rockyou. No string manipulation occured. 
-    Only for words matching the simplest regular expression. 
+    Files contains dictionary words plus some of the most common passwords
+    captured from rockyou. No string manipulation occured.
+    Only for words matching the simplest regular expression.
 
     Returns:
         A text file with hashed words from the dictionary
@@ -152,12 +169,12 @@ def load_e_words():
 def comparepwd(hash_password,dictionary):
     """Compare hashed_password with dictionary of passwords
 
-    These words a dictionary words plus some of the most common passwords 
-    captured from rockyou and websters-dictionary. No string manipulation occured. 
-    Only for words matching the simplest regular expression. 
+    These words a dictionary words plus some of the most common passwords
+    captured from rockyou and websters-dictionary. No string manipulation occured.
+    Only for words matching the simplest regular expression.
 
     Returns:
-        If identified returns the plaintext word for the hash else, not found. 
+        If identified returns the plaintext word for the hash else, not found.
     """
     total=100
     i=0
@@ -168,7 +185,8 @@ def comparepwd(hash_password,dictionary):
             if hash_password==word:
                 print "Match found , password_hash = "+hash_password+" = "+word
 
-        
+
+
 @timeit
 def main(args):
     if args['<plaintext_password>']:
@@ -193,19 +211,17 @@ def main(args):
             return
         if args['--diff']:
             return
-        
+
         return
     if args['--file']:
         if args['-b']:
             return
         return
-  
+
     return
+
+
 
 if __name__ == '__main__':
     args = docopt(__doc__, version='Crackerjack 2.0')
     main(args)
-    
-    
-
- 
