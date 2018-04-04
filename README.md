@@ -37,4 +37,4 @@ Options:
     -d --diff       Password must be of length 8, contain at least 1 upper,
                     lower alphanumeric character and a special character 
                     (a-z,A-Z,0-9,!@#\$%\^&) e.g -d P@ssw0rd#% .
-    -f --file          Accepts a file with a list of passwords e.g. -f /path/to/password_list.txt.
+    -f --file       Accepts a file with a list of passwords e.g. -f /path/to/password_list.txt.

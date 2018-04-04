@@ -27,7 +27,7 @@ import json,os,sys
 import bcrypt
 from docopt import docopt
 from re import compile
-from time import sleep
+from progressbar import AnimatedMarker, Bar,Counter, Percentage,ProgressBar
 
 #Commonly used regex for accepting passwords across websites forms
 HARD_REGEX = compile(r'^(?=.*[a-z])(?=.*[A-Z])(?=.*[0-9])(?=.*[!@#\$%\^&])(?=.{9,})')
@@ -59,12 +59,21 @@ def extract_words_from_file(filename):
     Returns:
         List of file words
     """
+    dictionary=set()
+    widgets=['Extracting words_dictionary: ',Bar(), Percentage()]
+    pbar = ProgressBar(widgets=widgets,maxval=500000).start()
+    i=0
     try:
         with open(filename, 'r') as file:
-            lines = [line.strip("\n") for line in file]
-            file.close()
-            return lines
+            for line in file:
+                dictionary.add(line.strip('\n'))
+                i+=1
+                pbar.update(i)
+            pbar.finish()
+            return dictionary
+            
     except Exception as e:
+        logging.exception("message")
         print str(e)
 
 
@@ -84,8 +93,8 @@ def timeit(method):
             name = kw.get('log_name', method.__name__.upper())
             kw['log_time'][name] = int((te - ts) * 1000)
         else:
-            print '\nTime taken in module %r = %2.2f ms' % \
-                  (method.__name__, (te - ts) * 1000)
+            print 'Time taken in module %r = %2.2f s' % \
+                  (method.__name__, (te - ts) * 1)
         return result
     return timed
 
@@ -99,16 +108,10 @@ def load_m_words():
     Returns:
         A text file with hashed words from the dictionary
     """
-    try:
-        filename = os.getcwd()+"/data/words_dictionary.json"
-        with open(filename,"r") as easy_password_dictionary:
-            valid_words = json.load(easy_password_dictionary)
-            return valid_words
-    except Exception as e:
-        logging.exception("message")
-        print str(e)
-    finally:
-        ff.close()
+    filename = os.getcwd()+'/data/words_dictionary.json'
+    valid_words = []
+    return valid_words
+ 
 
 def load_h_words():
     """Fetches words from a simple word dictionary.
@@ -120,29 +123,9 @@ def load_h_words():
     Returns:
         A text file with hashed words from the dictionary
     """
-    try:
-        filename = os.getcwd()+"/data/words_dictionary.json"
-        with open(filename,"r") as easy_password_dictionary:
-            valid_words = json.load(easy_password_dictionary)
-            return valid_words
-    except Exception as e:
-        logging.exception("message")
-        print str(e)
-    finally:
-        ff.close()
-
-def progress(count, total, status='Attempting to crack password'):
-    """Print a progress bar while password if being cracked
-
-    """
-    bar_len = 60
-    filled_len = int(round(bar_len * count / float(total)))
-    percents = round(100.0 * count / float(total), 1)
-    bar = '█' * filled_len + '-' * (bar_len - filled_len)
-    sys.stdout.write('[%s] %s%s ... %s\r' % (bar, percents, '%', status))
-    if count == total:
-        sys.stdout.write('\n')
-    sys.stdout.flush()
+    filename = os.getcwd()+'/data/RockYou500k.dic'
+    valid_words = []
+    return valid_words
 
 
 def load_e_words():
@@ -155,18 +138,12 @@ def load_e_words():
     Returns:
         A text file with hashed words from the dictionary
     """
-    valid_words=[]
-    filename = os.getcwd()+"/data/samplewords.txt"
-    try:
-        with open(filename,"r") as easy_password_dictionary:
-            for line in easy_password_dictionary:
-                valid_words.append(line.strip('\n'))
-            return valid_words
-    except Exception as e:
-        logging.exception("message")
-        print str(e)
+    filename = os.getcwd()+"/data/words.txt"
+    valid_words = extract_words_from_file(filename)
+    return valid_words
 
-def comparepwd(hash_password,dictionary):
+@timeit
+def crack_password(hash_password,dictionary):
     """Compare hashed_password with dictionary of passwords
 
     These words a dictionary words plus some of the most common passwords
@@ -176,18 +153,21 @@ def comparepwd(hash_password,dictionary):
     Returns:
         If identified returns the plaintext word for the hash else, not found.
     """
-    total=100
+    widgets = ['Attempting to crack password ',AnimatedMarker(),' ',Percentage()]
+    pbar = ProgressBar(widgets=widgets).start()
     i=0
-    while i < total:
-        progress(i, total)
-        for word in dictionary:
-            i+=1
-            if hash_password==word:
-                print "Match found , password_hash = "+hash_password+" = "+word
+    for word in dictionary:
+        if check_password(word,hash_password):
+            pbar.finish()
+            print "Password identified, password ===> "+word
+            return
+        i+= 1
+        pbar.update(i)
+    pbar.finish()
+    print "Failed : Password not identified"
 
 
 
-@timeit
 def main(args):
     if args['<plaintext_password>']:
         plaintext_passwords=args['<plaintext_password>']
@@ -195,23 +175,22 @@ def main(args):
             if hard_regex(password):
                 dictionary=load_h_words()
                 entered_pw_hash = hash_password(password)
-                comparepwd(entered_pw_hash,dictionary)
+                crack_password(entered_pw_hash,dictionary)
             elif medium_regex(password):
                 dictionary=load_m_words()
                 entered_pw_hash = hash_password(password)
-                comparepwd(entered_pw_hash,dictionary)
+                crack_password(entered_pw_hash,dictionary)
             else:
-                dictionary=load_e_words()
                 entered_pw_hash = hash_password(password)
-                comparepwd(entered_pw_hash,dictionary)
-
+                print "Your password is so easy"
+                print "Password hash = "+entered_pw_hash
+                dictionary=load_e_words()
+                crack_password(entered_pw_hash,dictionary)
     if args['-b']:
-    #hash pasword cracker algorightm
         if args['--med']:
             return
         if args['--diff']:
             return
-
         return
     if args['--file']:
         if args['-b']:
