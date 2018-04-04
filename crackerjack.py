@@ -61,7 +61,7 @@ def extract_words_from_file(filename):
     """
     dictionary=set()
     widgets=['Extracting words_dictionary: ',Bar(), Percentage()]
-    pbar = ProgressBar(widgets=widgets,maxval=500000).start()
+    pbar = ProgressBar(widgets=widgets,maxval=470000).start()
     i=0
     try:
         with open(filename, 'r') as file:
@@ -154,7 +154,7 @@ def crack_password(hash_password,dictionary):
         If identified returns the plaintext word for the hash else, not found.
     """
     widgets = ['Attempting to crack password ',AnimatedMarker(),' ',Percentage()]
-    pbar = ProgressBar(widgets=widgets).start()
+    pbar = ProgressBar(widgets=widgets,maxval=len(dictionary)).start()
     i=0
     for word in dictionary:
         if check_password(word,hash_password):
