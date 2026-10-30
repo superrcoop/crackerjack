@@ -51,6 +51,8 @@ class NISTEvaluation:
     composition: CompositionFlags
     score: int  # 0 to 100
     grade: str  # A+, A, B, C, D, F
+    has_context_words: bool = False
+    matched_context_terms: list[str] = field(default_factory=list)
     recommendations: list[str] = field(default_factory=list)
 
     def to_dict(self) -> dict[str, Any]:
@@ -63,6 +65,8 @@ class NISTEvaluation:
             "has_repetitive_pattern": self.has_repetitive_pattern,
             "has_sequential_pattern": self.has_sequential_pattern,
             "is_dictionary_word": self.is_dictionary_word,
+            "has_context_words": self.has_context_words,
+            "matched_context_terms": self.matched_context_terms,
             "composition": self.composition.to_dict(),
             "score": self.score,
             "grade": self.grade,

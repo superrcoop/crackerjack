@@ -1,36 +1,111 @@
-"""High-performance multi-core bcrypt auditing engine.
+"""High-performance multi-algorithm password auditing and hashing engine.
 
-Uses multiprocessing to distribute CPU-bound bcrypt calculations across
-all available CPU cores, providing significant speedups on multi-core processors.
+Supports multi-core multiprocessing across:
+- Bcrypt ($2a$, $2b$, $2y$)
+- Argon2 ($argon2id$, $argon2i$, $argon2d$) via argon2-cffi
+- PBKDF2-HMAC-SHA256 ($pbkdf2-sha256$, pbkdf2_sha256) via standard library hashlib
 """
 
 from __future__ import annotations
 
+import base64
+import hashlib
+import hmac
 import os
 import time
 from concurrent.futures import ProcessPoolExecutor, as_completed
-from dataclasses import dataclass
 from typing import Callable, Iterable, Iterator, Sequence
 
 import bcrypt
 
 from crackerjack.models import BenchmarkResult, HashAuditResult
 
+try:
+    import argon2
+    HAS_ARGON2 = True
+except ImportError:
+    HAS_ARGON2 = False
+
 
 def is_bcrypt_hash(hash_str: str) -> bool:
-    """Check if a string matches the standard modular crypt bcrypt format."""
+    """Check if a string matches standard modular crypt bcrypt format."""
     clean = hash_str.strip()
-    return (
-        clean.startswith(("$2a$", "$2b$", "$2y$", "$2x$"))
-        and len(clean) == 60
-    )
+    return clean.startswith(("$2a$", "$2b$", "$2y$", "$2x$")) and len(clean) == 60
+
+
+def is_argon2_hash(hash_str: str) -> bool:
+    """Check if a string matches standard Argon2 modular crypt format."""
+    clean = hash_str.strip()
+    return clean.startswith(("$argon2id$", "$argon2i$", "$argon2d$"))
+
+
+def is_pbkdf2_hash(hash_str: str) -> bool:
+    """Check if a string matches PBKDF2 modular crypt or Django format."""
+    clean = hash_str.strip()
+    return clean.startswith(("$pbkdf2-sha256$", "$pbkdf2$", "pbkdf2_sha256$"))
+
+
+def detect_hash_type(hash_str: str) -> str:
+    """Detect the hashing algorithm of a candidate hash string."""
+    clean = hash_str.strip()
+    if is_bcrypt_hash(clean):
+        return "bcrypt"
+    if is_argon2_hash(clean):
+        return "argon2"
+    if is_pbkdf2_hash(clean):
+        return "pbkdf2"
+    return "unknown"
+
+
+def hash_password(
+    password: str,
+    algorithm: str = "bcrypt",
+    cost: int | None = None,
+) -> str:
+    """Generate a password hash using the specified algorithm.
+
+    Args:
+        password: The plaintext password.
+        algorithm: 'bcrypt', 'argon2id', or 'pbkdf2-sha256'.
+        cost: Algorithmic cost factor (rounds for bcrypt, time_cost for argon2, iterations for pbkdf2).
+    """
+    algo = algorithm.lower().strip()
+    if algo == "bcrypt":
+        rounds = cost if cost is not None else 12
+        salt = bcrypt.gensalt(rounds=rounds)
+        return bcrypt.hashpw(password.encode("utf-8"), salt).decode("ascii")
+
+    elif algo in ("argon2", "argon2id"):
+        if not HAS_ARGON2:
+            raise RuntimeError(
+                "The 'argon2-cffi' package is required for Argon2 support. "
+                "Install it with: pip install argon2-cffi"
+            )
+        time_cost = cost if cost is not None else 2
+        ph = argon2.PasswordHasher(
+            time_cost=time_cost,
+            memory_cost=65536,
+            parallelism=4,
+            type=argon2.Type.ID,
+        )
+        return ph.hash(password)
+
+    elif algo in ("pbkdf2", "pbkdf2-sha256"):
+        iterations = cost if cost is not None else 100_000
+        salt_bytes = os.urandom(16)
+        dk = hashlib.pbkdf2_hmac("sha256", password.encode("utf-8"), salt_bytes, iterations)
+        salt_b64 = base64.b64encode(salt_bytes).decode("ascii")
+        hash_b64 = base64.b64encode(dk).decode("ascii")
+        return f"$pbkdf2-sha256${iterations}${salt_b64}${hash_b64}"
+
+    else:
+        raise ValueError(f"Unsupported algorithm '{algorithm}'. Choose from: bcrypt, argon2id, pbkdf2-sha256")
 
 
 def verify_bcrypt_single(candidate: str, hash_bytes: bytes) -> bool:
     """Safely check candidate against a bcrypt hash."""
     try:
         cand_bytes = candidate.encode("utf-8")
-        # Bcrypt max password length is 72 bytes
         if len(cand_bytes) > 72:
             cand_bytes = cand_bytes[:72]
         return bcrypt.checkpw(cand_bytes, hash_bytes)
@@ -38,27 +113,66 @@ def verify_bcrypt_single(candidate: str, hash_bytes: bytes) -> bool:
         return False
 
 
-def _worker_check_batch(
-    candidates: list[str],
-    target_hashes: list[tuple[str, bytes]],
-) -> list[tuple[str, str]]:
-    """Worker task executed in a separate process.
+def verify_argon2_single(candidate: str, hash_str: str) -> bool:
+    """Safely check candidate against an Argon2 hash."""
+    if not HAS_ARGON2:
+        return False
+    try:
+        ph = argon2.PasswordHasher()
+        return ph.verify(hash_str.strip(), candidate)
+    except Exception:
+        return False
 
-    Checks a list of candidate plaintexts against a list of target hashes.
+
+def verify_pbkdf2_single(candidate: str, hash_str: str) -> bool:
+    """Safely check candidate against a PBKDF2 hash using constant-time comparison."""
+    try:
+        clean = hash_str.strip()
+        parts = clean.split("$")
+        if len(parts) == 5 and parts[1] == "pbkdf2-sha256":
+            iterations = int(parts[2])
+            salt = base64.b64decode(parts[3])
+            expected_dk = base64.b64decode(parts[4])
+            cand_dk = hashlib.pbkdf2_hmac("sha256", candidate.encode("utf-8"), salt, iterations)
+            return hmac.compare_digest(cand_dk, expected_dk)
+        elif clean.startswith("pbkdf2_sha256$"):
+            dj_parts = clean.split("$")
+            iterations = int(dj_parts[1])
+            salt = dj_parts[2].encode("utf-8")
+            expected_hash = dj_parts[3]
+            cand_dk = hashlib.pbkdf2_hmac("sha256", candidate.encode("utf-8"), salt, iterations)
+            cand_hash = base64.b64encode(cand_dk).decode("ascii")
+            return hmac.compare_digest(cand_hash, expected_hash)
+        return False
+    except Exception:
+        return False
+
+
+def verify_single_hash(candidate: str, hash_str: str, algo_type: str) -> bool:
+    """Unified verification dispatcher."""
+    if algo_type == "bcrypt":
+        return verify_bcrypt_single(candidate, hash_str.encode("ascii"))
+    elif algo_type == "argon2":
+        return verify_argon2_single(candidate, hash_str)
+    elif algo_type == "pbkdf2":
+        return verify_pbkdf2_single(candidate, hash_str)
+    return False
+
+
+def _worker_check_batch_multi(
+    candidates: list[str],
+    target_hashes: list[tuple[str, str]],
+) -> list[tuple[str, str]]:
+    """Worker task executed in a separate process for multi-algorithm targets.
+
+    target_hashes is a list of (hash_str, algo_type).
     Returns list of (target_hash_str, matched_plaintext).
     """
     found: list[tuple[str, str]] = []
     for candidate in candidates:
-        cand_bytes = candidate.encode("utf-8")
-        if len(cand_bytes) > 72:
-            cand_bytes = cand_bytes[:72]
-
-        for hash_str, hash_bytes in target_hashes:
-            try:
-                if bcrypt.checkpw(cand_bytes, hash_bytes):
-                    found.append((hash_str, candidate))
-            except Exception:
-                continue
+        for hash_str, algo_type in target_hashes:
+            if verify_single_hash(candidate, hash_str, algo_type):
+                found.append((hash_str, candidate))
     return found
 
 
@@ -75,7 +189,7 @@ def chunk_iterable(iterable: Iterable[str], chunk_size: int = 100) -> Iterator[l
 
 
 class MultiCoreAuditEngine:
-    """Auditing engine utilizing multiprocessing for parallel bcrypt hashing."""
+    """Auditing engine utilizing multiprocessing for parallel hash verification."""
 
     def __init__(self, workers: int | None = None) -> None:
         self.workers = workers or max(1, os.cpu_count() or 1)
@@ -87,10 +201,10 @@ class MultiCoreAuditEngine:
         chunk_size: int = 100,
         progress_callback: Callable[[int, float, float, dict[str, str]], None] | None = None,
     ) -> list[HashAuditResult]:
-        """Audit a collection of bcrypt hashes against a candidate stream.
+        """Audit a collection of hashes (bcrypt, argon2, pbkdf2) against candidates.
 
         Args:
-            target_hashes: List of bcrypt hash strings to identify.
+            target_hashes: List of hash strings to audit.
             candidate_words: Stream of candidate plaintext words.
             chunk_size: Size of candidate batches dispatched to each worker core.
             progress_callback: Optional callback(checked_count, elapsed_sec, hash_rate, cracked_map).
@@ -98,24 +212,23 @@ class MultiCoreAuditEngine:
         Returns:
             List of HashAuditResult objects for each target hash.
         """
-        valid_targets: list[tuple[str, bytes]] = []
+        valid_targets: list[tuple[str, str]] = []
         for h in target_hashes:
             h_clean = h.strip()
-            if is_bcrypt_hash(h_clean):
-                valid_targets.append((h_clean, h_clean.encode("ascii")))
+            algo = detect_hash_type(h_clean)
+            if algo != "unknown":
+                valid_targets.append((h_clean, algo))
 
         if not valid_targets:
             return []
 
-        uncracked: dict[str, bytes] = dict(valid_targets)
+        uncracked: dict[str, str] = dict(valid_targets)
         cracked: dict[str, str] = {}
         total_checked = 0
         start_time = time.perf_counter()
 
-        # Submit chunks to ProcessPoolExecutor
         with ProcessPoolExecutor(max_workers=self.workers) as executor:
             chunk_iter = chunk_iterable(candidate_words, chunk_size=chunk_size)
-            # Maintain active futures pipeline
             max_pending = self.workers * 4
             future_to_chunk_size = {}
 
@@ -124,11 +237,10 @@ class MultiCoreAuditEngine:
                     break
 
                 target_list = list(uncracked.items())
-                fut = executor.submit(_worker_check_batch, chunk, target_list)
+                fut = executor.submit(_worker_check_batch_multi, chunk, target_list)
                 future_to_chunk_size[fut] = len(chunk)
 
                 if len(future_to_chunk_size) >= max_pending:
-                    # Collect finished futures before queueing more
                     done = []
                     for future in as_completed(future_to_chunk_size):
                         done.append(future)
@@ -146,17 +258,14 @@ class MultiCoreAuditEngine:
                             progress_callback(total_checked, elapsed, rate, cracked)
 
                         if not uncracked:
-                            # Cancel remaining
                             for pending in future_to_chunk_size:
                                 pending.cancel()
                             future_to_chunk_size.clear()
                             break
 
-                        # Break after consuming at least one batch to keep pipeline filled
                         if len(future_to_chunk_size) < self.workers * 2:
                             break
 
-            # Drain any remaining active futures
             for future in as_completed(list(future_to_chunk_size.keys())):
                 c_size = future_to_chunk_size.pop(future, 0)
                 total_checked += c_size
@@ -178,7 +287,7 @@ class MultiCoreAuditEngine:
         final_rate = total_checked / max(total_elapsed, 0.001)
 
         results: list[HashAuditResult] = []
-        for h_str, _ in valid_targets:
+        for h_str, algo in valid_targets:
             is_cracked = h_str in cracked
             pw = cracked.get(h_str)
             results.append(
@@ -186,7 +295,7 @@ class MultiCoreAuditEngine:
                     target_hash=h_str,
                     cracked=is_cracked,
                     plaintext=pw,
-                    hash_type="bcrypt",
+                    hash_type=algo,
                     attempts=total_checked,
                     elapsed_seconds=total_elapsed,
                     hash_rate=final_rate,
@@ -197,25 +306,32 @@ class MultiCoreAuditEngine:
 
 
 def run_benchmark(
-    cost_factor: int = 10,
+    algorithm: str = "bcrypt",
+    cost_factor: int | None = None,
     rounds: int = 16,
     workers: int | None = None,
 ) -> BenchmarkResult:
-    """Benchmark single-core vs multi-core bcrypt throughput."""
+    """Benchmark single-core vs multi-core throughput for a given algorithm."""
     num_workers = workers or max(1, os.cpu_count() or 1)
-    # Generate a reference bcrypt hash with specified cost
+    algo = algorithm.lower().strip()
+
+    if algo == "bcrypt":
+        effective_cost = cost_factor if cost_factor is not None else 10
+    elif algo in ("argon2", "argon2id"):
+        effective_cost = cost_factor if cost_factor is not None else 2
+    elif algo in ("pbkdf2", "pbkdf2-sha256"):
+        effective_cost = cost_factor if cost_factor is not None else 50_000
+    else:
+        effective_cost = cost_factor if cost_factor is not None else 10
+
     test_password = "CrackerjackBenchmarkTest#2026"
-    test_hash_bytes = bcrypt.hashpw(
-        test_password.encode("utf-8"),
-        bcrypt.gensalt(rounds=cost_factor),
-    )
-    test_hash_str = test_hash_bytes.decode("ascii")
+    test_hash_str = hash_password(test_password, algorithm=algo, cost=effective_cost)
 
     candidates = [f"candidate_attempt_{i}" for i in range(rounds)]
 
     # 1. Single-core benchmark
     single_start = time.perf_counter()
-    _worker_check_batch(candidates, [(test_hash_str, test_hash_bytes)])
+    _worker_check_batch_multi(candidates, [(test_hash_str, algo)])
     single_elapsed = time.perf_counter() - single_start
     single_rate = rounds / max(single_elapsed, 0.0001)
 
@@ -236,8 +352,8 @@ def run_benchmark(
     speedup = multi_rate / max(single_rate, 0.0001)
 
     return BenchmarkResult(
-        algorithm="bcrypt",
-        cost_factor=cost_factor,
+        algorithm=algo,
+        cost_factor=effective_cost,
         workers=num_workers,
         single_core_rate=single_rate,
         multi_core_rate=multi_rate,

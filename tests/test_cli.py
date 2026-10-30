@@ -1,10 +1,10 @@
 """Tests for Typer CLI commands."""
 
+import gzip
 from pathlib import Path
 from unittest.mock import patch
 
 import bcrypt
-import pytest
 from crackerjack.cli import app
 from crackerjack.models import BreachInfo
 from typer.testing import CliRunner
@@ -16,14 +16,21 @@ def test_cli_version():
     result = runner.invoke(app, ["version"])
     assert result.exit_code == 0
     assert "Crackerjack Version" in result.output
-    assert "3.0.0" in result.output
+    assert "3.1.0" in result.output
 
 
-def test_cli_hash():
+def test_cli_hash_bcrypt():
     result = runner.invoke(app, ["hash", "MySecretPassword123!", "--cost", "4"])
     assert result.exit_code == 0
-    assert "Bcrypt Hash" in result.output
+    assert "BCRYPT Hash" in result.output
     assert "$2b$04$" in result.output
+
+
+def test_cli_hash_pbkdf2():
+    result = runner.invoke(app, ["hash", "MySecretPassword123!", "--algo", "pbkdf2-sha256", "--cost", "1000"])
+    assert result.exit_code == 0
+    assert "PBKDF2-SHA256 Hash" in result.output
+    assert "$pbkdf2-sha256$1000$" in result.output
 
 
 @patch("crackerjack.cli.check_password_breached")
@@ -39,6 +46,19 @@ def test_cli_check_safe(mock_breach):
 
 
 @patch("crackerjack.cli.check_password_breached")
+def test_cli_check_with_context_penalty(mock_breach):
+    mock_breach.return_value = BreachInfo(
+        pwned=False,
+        breach_count=0,
+        status_message="Safe",
+    )
+    result = runner.invoke(app, ["check", "AcmeCorpPassphrase2026!", "--context", "acme,admin"])
+    assert result.exit_code == 0
+    assert "Context-Specific Match" in result.output
+    assert "acme" in result.output
+
+
+@patch("crackerjack.cli.check_password_breached")
 def test_cli_check_breached_fails(mock_breach):
     mock_breach.return_value = BreachInfo(
         pwned=True,
@@ -50,15 +70,17 @@ def test_cli_check_breached_fails(mock_breach):
     assert "COMPROMISED" in result.output or "CRITICAL" in result.output
 
 
-def test_cli_audit_command(tmp_path: Path):
+def test_cli_audit_command_gzip_wordlist(tmp_path: Path):
     pw = "sampleword123"
     hashed = bcrypt.hashpw(pw.encode("utf-8"), bcrypt.gensalt(rounds=4)).decode("ascii")
 
     hash_file = tmp_path / "test_hashes.txt"
     hash_file.write_text(f"{hashed}\n")
 
-    wordlist_file = tmp_path / "test_words.txt"
-    wordlist_file.write_text("dummy1\nsampleword123\ndummy2\n")
+    # Write wordlist as a .gz compressed file
+    wordlist_gz = tmp_path / "test_words.txt.gz"
+    with gzip.open(wordlist_gz, "wb") as f:
+        f.write(b"dummy1\nsampleword123\ndummy2\n")
 
     output_json = tmp_path / "result.json"
 
@@ -68,7 +90,7 @@ def test_cli_audit_command(tmp_path: Path):
             "audit",
             str(hash_file),
             "--wordlist",
-            str(wordlist_file),
+            str(wordlist_gz),
             "--workers",
             "2",
             "--no-rules",
@@ -76,7 +98,6 @@ def test_cli_audit_command(tmp_path: Path):
             str(output_json),
         ],
     )
-    # Since a hash was cracked, exit code is 1 (alerting security admins)
     assert result.exit_code == 1
     assert "CRACKED" in result.output
     assert output_json.exists()

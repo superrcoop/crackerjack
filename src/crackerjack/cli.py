@@ -8,7 +8,6 @@ import sys
 from pathlib import Path
 from typing import Annotated, Optional
 
-import bcrypt
 import typer
 
 from crackerjack import __version__
@@ -16,14 +15,14 @@ from crackerjack.auditor import evaluate_password
 from crackerjack.breach import check_password_breached
 from crackerjack.engine import (
     MultiCoreAuditEngine,
-    is_bcrypt_hash,
+    detect_hash_type,
+    hash_password,
     run_benchmark,
 )
 from crackerjack.models import (
     BreachInfo,
     PasswordHealthReport,
 )
-from crackerjack.rules import mutate_word
 from crackerjack.ui import (
     console,
     create_audit_progress,
@@ -32,6 +31,7 @@ from crackerjack.ui import (
     render_password_health,
     show_banner,
 )
+from crackerjack.wordlist import stream_candidates
 
 app = typer.Typer(
     name="crackerjack",
@@ -46,11 +46,27 @@ def main_callback() -> None:
     """Crackerjack 3.0 Security & Audit Suite."""
 
 
+def _parse_context_terms(context_str: Optional[str]) -> list[str] | None:
+    """Parse comma-separated context terms."""
+    if not context_str:
+        return None
+    terms = [t.strip() for t in context_str.split(",") if t.strip()]
+    return terms or None
+
+
 @app.command(name="check")
 def check_command(
     password: Annotated[
         Optional[str],
         typer.Argument(help="Plaintext password to evaluate (prompted securely if omitted)"),
+    ] = None,
+    context: Annotated[
+        Optional[str],
+        typer.Option(
+            "--context",
+            "-C",
+            help="Comma-separated context terms (username, applicant name, service, company) per NIST SP 800-63B",
+        ),
     ] = None,
     no_hibp: Annotated[
         bool,
@@ -73,7 +89,8 @@ def check_command(
         console.print("[red]Error: Empty password provided.[/red]")
         raise typer.Exit(code=1)
 
-    nist_eval = evaluate_password(password)
+    context_terms = _parse_context_terms(context)
+    nist_eval = evaluate_password(password, context_terms=context_terms)
 
     if no_hibp:
         breach_info = BreachInfo(
@@ -99,7 +116,11 @@ def check_command(
     else:
         verdict = "[bold red]CRITICAL (Violates NIST SP 800-63B baseline)[/bold red]"
 
-    masked = password if show_plaintext else (password[0] + "*" * (len(password) - 2) + password[-1] if len(password) > 2 else "***")
+    masked = (
+        password
+        if show_plaintext
+        else (password[0] + "*" * (len(password) - 2) + password[-1] if len(password) > 2 else "***")
+    )
 
     report = PasswordHealthReport(
         password_masked=masked,
@@ -123,23 +144,35 @@ def check_command(
 def hash_command(
     password: Annotated[
         Optional[str],
-        typer.Argument(help="Plaintext password to hash with bcrypt (prompted securely if omitted)"),
+        typer.Argument(help="Plaintext password to hash (prompted securely if omitted)"),
     ] = None,
+    algo: Annotated[
+        str,
+        typer.Option(
+            "--algo",
+            "-a",
+            help="Cryptographic hashing algorithm: bcrypt, argon2id, or pbkdf2-sha256",
+        ),
+    ] = "bcrypt",
     cost: Annotated[
-        int,
-        typer.Option("--cost", "-c", min=4, max=31, help="Bcrypt cost factor (work factor)"),
-    ] = 12,
+        Optional[int],
+        typer.Option(
+            "--cost",
+            "-c",
+            help="Cost factor (rounds for bcrypt, time_cost for argon2, iterations for pbkdf2)",
+        ),
+    ] = None,
 ) -> None:
-    """Generate a cryptographically secure bcrypt hash for a plaintext password."""
+    """Generate a cryptographically secure hash (Bcrypt, Argon2id, or PBKDF2)."""
     if not password:
         password = typer.prompt("Enter password to hash", hide_input=True)
 
-    pw_bytes = password.encode("utf-8")
-    salt = bcrypt.gensalt(rounds=cost)
-    hashed = bcrypt.hashpw(pw_bytes, salt)
-    hash_str = hashed.decode("ascii")
-
-    console.print(f"[bold green]Bcrypt Hash (cost {cost}):[/bold green] [bold white]{hash_str}[/bold white]")
+    try:
+        hash_str = hash_password(password, algorithm=algo, cost=cost)
+        console.print(f"[bold green]{algo.upper()} Hash:[/bold green] [bold white]{hash_str}[/bold white]")
+    except Exception as e:
+        console.print(f"[bold red]Error generating hash:[/bold red] {e}")
+        raise typer.Exit(code=1)
 
 
 def _load_lines_from_path(file_path: Path) -> list[str]:
@@ -157,25 +190,6 @@ def _load_lines_from_path(file_path: Path) -> list[str]:
     return lines
 
 
-def _stream_wordlist_candidates(
-    wordlist_path: Path,
-    use_rules: bool = True,
-) -> list[str]:
-    """Stream candidate words from a wordlist, optionally applying mutation rules."""
-    words = _load_lines_from_path(wordlist_path)
-    if not use_rules:
-        return words
-
-    seen: set[str] = set()
-    candidates: list[str] = []
-    for w in words:
-        for variant in mutate_word(w):
-            if variant not in seen:
-                seen.add(variant)
-                candidates.append(variant)
-    return candidates
-
-
 @app.command(name="audit")
 def audit_command(
     target: Annotated[
@@ -190,7 +204,15 @@ def audit_command(
         typer.Option(
             "--wordlist",
             "-w",
-            help="Path to dictionary wordlist (e.g. rockyou.txt or samplewords.txt)",
+            help="Path to dictionary wordlist (supports .txt, .gz, .bz2, .xz)",
+        ),
+    ] = None,
+    context: Annotated[
+        Optional[str],
+        typer.Option(
+            "--context",
+            "-C",
+            help="Context terms for plaintext evaluations (username, company, service)",
         ),
     ] = None,
     workers: Annotated[
@@ -216,7 +238,7 @@ def audit_command(
         typer.Option("--output", "-o", help="Write audit results to JSON file"),
     ] = None,
 ) -> None:
-    """Audit hashes or passwords using multi-core multiprocessing and wordlists."""
+    """Audit hashes or passwords using multi-core multiprocessing and streaming wordlists."""
     show_banner()
 
     target_str = str(target)
@@ -224,31 +246,33 @@ def audit_command(
 
     if Path(target).is_file():
         raw_lines = _load_lines_from_path(Path(target))
-        # Determine if lines are hashes or plaintexts
         for line in raw_lines:
-            if is_bcrypt_hash(line):
+            algo = detect_hash_type(line)
+            if algo != "unknown":
                 target_hashes.append(line)
             else:
-                # Could be a hash on a line with username:hash
                 parts = line.split(":")
                 for p in parts:
-                    if is_bcrypt_hash(p.strip()):
+                    p_algo = detect_hash_type(p.strip())
+                    if p_algo != "unknown":
                         target_hashes.append(p.strip())
                         break
         if not target_hashes:
-            # Check if this is a plaintext list to audit
-            console.print(f"[yellow]No bcrypt hashes detected in {target}. Auditing as plaintext passwords...[/yellow]")
-            _audit_plaintext_file(raw_lines, output)
+            console.print(f"[yellow]No supported hashes detected in {target}. Auditing as plaintext passwords...[/yellow]")
+            context_terms = _parse_context_terms(context)
+            _audit_plaintext_file(raw_lines, output, context_terms=context_terms)
             return
-    elif is_bcrypt_hash(target_str):
+    elif detect_hash_type(target_str) != "unknown":
         target_hashes.append(target_str)
     else:
-        console.print(f"[red]Error: Target '{target_str}' is neither an existing file nor a valid bcrypt hash.[/red]")
+        console.print(
+            f"[red]Error: Target '{target_str}' is neither an existing file nor a supported hash "
+            f"(bcrypt, argon2id, pbkdf2-sha256).[/red]"
+        )
         raise typer.Exit(code=1)
 
     # Validate wordlist
     if not wordlist:
-        # Check if default sample words exist
         default_sample = Path("data/samplewords.txt")
         if default_sample.exists():
             wordlist = default_sample
@@ -257,6 +281,10 @@ def audit_command(
             console.print("[red]Error: --wordlist must be provided to audit hashes.[/red]")
             raise typer.Exit(code=1)
 
+    if not wordlist.exists():
+        console.print(f"[red]Error: Wordlist not found: {wordlist}[/red]")
+        raise typer.Exit(code=1)
+
     console.print(
         f"[bold cyan]Starting Multi-Core Audit:[/bold cyan] "
         f"[white]{len(target_hashes)} target hashes[/white] | "
@@ -264,15 +292,16 @@ def audit_command(
         f"[yellow]Wordlist: {wordlist}[/yellow]"
     )
 
-    candidates = _stream_wordlist_candidates(wordlist, use_rules=rules)
-    console.print(f"[dim]Prepared {len(candidates):,} candidate variations (rules={'enabled' if rules else 'disabled'}).[/dim]")
+    # Zero-RAM streaming candidate generator
+    candidate_stream = stream_candidates(wordlist, use_rules=rules)
+    console.print(f"[dim]Streaming candidate words (rules={'enabled' if rules else 'disabled'}).[/dim]")
 
     engine = MultiCoreAuditEngine(workers=workers)
 
     with create_audit_progress() as progress:
         task_id = progress.add_task(
             "Auditing hashes",
-            total=len(candidates),
+            total=None,
             rate="0.0 H/s",
         )
 
@@ -285,7 +314,7 @@ def audit_command(
 
         results = engine.audit_hashes(
             target_hashes=target_hashes,
-            candidate_words=candidates,
+            candidate_words=candidate_stream,
             chunk_size=chunk_size,
             progress_callback=on_progress,
         )
@@ -298,7 +327,6 @@ def audit_command(
             json.dump(output_data, f, indent=2)
         console.print(f"[green]Audit report saved to {output}[/green]")
 
-    # Exit with code 1 if any hash was cracked
     any_cracked = any(r.cracked for r in results)
     if any_cracked:
         console.print("[bold red]Audit completed: Compromised hashes identified in wordlist![/bold red]")
@@ -307,11 +335,15 @@ def audit_command(
         console.print("[bold green]Audit completed: No target hashes matched the wordlist.[/bold green]")
 
 
-def _audit_plaintext_file(passwords: list[str], output_path: Optional[Path]) -> None:
+def _audit_plaintext_file(
+    passwords: list[str],
+    output_path: Optional[Path],
+    context_terms: list[str] | None = None,
+) -> None:
     """Batch evaluate plaintext passwords against NIST SP 800-63B and HIBP."""
     reports: list[dict] = []
     for pw in passwords:
-        nist = evaluate_password(pw)
+        nist = evaluate_password(pw, context_terms=context_terms)
         breach = check_password_breached(pw)
         report = PasswordHealthReport(
             password_masked=pw[0] + "*" * max(1, len(pw) - 2) + pw[-1] if len(pw) > 2 else "***",
@@ -331,10 +363,14 @@ def _audit_plaintext_file(passwords: list[str], output_path: Optional[Path]) -> 
 
 @app.command(name="benchmark")
 def benchmark_command(
+    algo: Annotated[
+        str,
+        typer.Option("--algo", "-a", help="Algorithm: bcrypt, argon2id, or pbkdf2-sha256"),
+    ] = "bcrypt",
     cost: Annotated[
-        int,
-        typer.Option("--cost", "-c", min=4, max=16, help="Bcrypt cost factor"),
-    ] = 10,
+        Optional[int],
+        typer.Option("--cost", "-c", help="Cost factor / work rounds / iterations"),
+    ] = None,
     rounds: Annotated[
         int,
         typer.Option("--rounds", "-r", help="Number of benchmark iterations"),
@@ -346,9 +382,14 @@ def benchmark_command(
 ) -> None:
     """Benchmark local CPU core performance (single-core vs multi-core throughput)."""
     show_banner()
-    console.print(f"[bold cyan]Benchmarking Bcrypt (cost {cost}) across {workers} CPU cores...[/bold cyan]")
+    console.print(f"[bold cyan]Benchmarking {algo.upper()} across {workers} CPU cores...[/bold cyan]")
 
-    result = run_benchmark(cost_factor=cost, rounds=rounds, workers=workers)
+    result = run_benchmark(
+        algorithm=algo,
+        cost_factor=cost,
+        rounds=rounds,
+        workers=workers,
+    )
     render_benchmark(result)
 
 

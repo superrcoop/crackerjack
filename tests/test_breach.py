@@ -1,7 +1,6 @@
 """Tests for HaveIBeenPwned k-anonymity client."""
 
 import httpx
-import pytest
 from crackerjack.breach import (
     check_password_breached,
     compute_sha1_prefix_suffix,

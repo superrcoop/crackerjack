@@ -1,6 +1,6 @@
-# Crackerjack 3.0
+# Crackerjack 3.1
 
-> **Modern Multi-Core Password Health Auditor & NIST SP 800-63B Compliance Checker**
+> **Modern Multi-Core Password Health Auditor, Multi-Algorithm KDF Engine & NIST SP 800-63B Compliance Checker**
 
 [![Python 3.11+](https://img.shields.io/badge/python-3.11+-blue.svg)](https://www.python.org/downloads/)
 [![License: GPL v3](https://img.shields.io/badge/License-GPLv3-blue.svg)](https://www.gnu.org/licenses/gpl-3.0)
@@ -13,25 +13,33 @@
  / /   / ___/ __ `/ ___/ //_/ _ \/ ___// / __ `/ ___/ //_/
 / /___/ /  / /_/ / /__/ ,< /  __/ /   / / /_/ / /__/ ,<
 \____/_/   \__,_/\___/_/|_|\___/_/ __/ /\__,_/\___/_/|_|
-                                  /___/      [v3.0.0]
+                                  /___/      [v3.1.0]
 ```
 
-**Crackerjack 3.0** transforms Crackerjack into an enterprise-grade **Password Health & Breach Auditor** designed for security teams, sysadmins, and developers. Built from the ground up for modern Python 3.11+, it pairs high-performance **multi-core multiprocessing** with defense-in-depth security standards like **NIST SP 800-63B** and the **HaveIBeenPwned** k-anonymity breach API.
+**Crackerjack 3.1** transforms Crackerjack into an enterprise-grade **Password Health & Breach Auditor** designed for security teams, sysadmins, and developers. Built from the ground up for modern Python 3.11+, it pairs high-performance **multi-core multiprocessing** with defense-in-depth security standards like **NIST SP 800-63B**, multi-algorithm KDF support (**Argon2id**, **PBKDF2-HMAC-SHA256**, **Bcrypt**), zero-RAM compressed wordlist streaming, and the **HaveIBeenPwned** k-anonymity breach API.
 
 ---
 
 ## Key Features
 
-- ⚡ **Multi-Core Bcrypt Multiprocessing Engine**: Bcrypt is intentionally designed to resist GPU cracking and is heavily CPU-bound. Crackerjack utilizes Python's multiprocessing pool to distribute batches across all available CPU cores (e.g. Apple Silicon M-series performance and efficiency cores), achieving up to 4x–8x throughput speedups.
+- ⚡ **Multi-Core Multi-Algorithm Multiprocessing Engine**: CPU-bound memory-hard password hashing is distributed across all available CPU cores (e.g. Apple Silicon M-series performance and efficiency cores), achieving up to 4x–8x throughput speedups. Auto-detects and audits:
+  - **Argon2** (`$argon2id$`, `$argon2i$`, `$argon2d$`)
+  - **PBKDF2-HMAC-SHA256** (`$pbkdf2-sha256$`, `pbkdf2_sha256$`)
+  - **Bcrypt** (`$2a$`, `$2b$`, `$2y$`)
+- 🚀 **Zero-RAM Compressed Wordlist Streaming**: Stream candidate passwords lazily with an $O(1)$ memory footprint. Native, transparent decompression for:
+  - Plain text (`.txt`, `.dic`, `.words`)
+  - Gzip (`.gz`, e.g. `rockyou.txt.gz`)
+  - Bzip2 (`.bz2`)
+  - Xz/LZMA (`.xz`, `.lzma`)
 - 🛡️ **NIST SP 800-63B Policy & Health Auditor**: Evaluate passwords against official NIST Digital Identity Guidelines:
   - Enforces minimum length requirements ($\ge 8$ characters, recommended $\ge 15$).
+  - **Context-Specific Dictionary Checks (§5.1.1.2)**: Compares passwords against user details, company names, or service handles (`--context "acme,admin,john.doe"`).
   - Evaluates raw and effective Shannon information entropy.
-  - Detects keyboard walks (`qwerty`, `12345`), repetition (`aaaa`), and common dictionary roots.
-  - Flags counter-productive arbitrary composition rules in favor of length and memorability.
+  - Detects keyboard walks (`qwerty`, `12345`), repetition (`aaaa`), and common dictionary roots (including leetspeak).
   - Computes objective letter grades (**A+**, **A**, **B**, **C**, **D**, **F**) with actionable remediation tips.
 - 🌐 **HaveIBeenPwned k-Anonymity Breach Detection**: Checks passwords against billions of compromised credentials via the Pwned Passwords API. Passwords are never sent over the network; only a 5-character SHA-1 prefix is transmitted, preserving complete privacy.
 - 🎨 **Modern Rich Terminal UI**: Colored terminal interface with styled tables, health badges, progress bars, live hash rates ($H/s$), and elapsed timers powered by `typer` and `rich`.
-- 🔄 **Hybrid Mutation Engine**: Complete rule permutations including leetspeak replacements, date/year additions, case modifications, and word reversals.
+- 🔄 **Hybrid Mutation Engine**: Generator-based mutation pipeline including leetspeak replacements, date/year additions, case modifications, and word reversals.
 - 📦 **Standard PEP 517/621 Packaging**: Packaged as `crackerjack-audit` with `pyproject.toml` for simple `pip` installation and CLI access.
 
 ---
@@ -63,6 +71,9 @@ Perform a NIST SP 800-63B health audit and HaveIBeenPwned breach check on a cand
 # Interactive check (prompts securely without echoing)
 crackerjack check
 
+# Check with context-specific dictionary terms (NIST SP 800-63B §5.1.1.2)
+crackerjack check "AcmeCorp2026!" --context "acme,admin,johndoe"
+
 # Check with masked display
 crackerjack check "Correct-Horse-Battery-Staple-2026!"
 
@@ -78,14 +89,14 @@ crackerjack check "Admin2024!" --json
 ---
 
 ### 2. Multi-Core Hash & Credential Auditing (`audit`)
-Audit lists of bcrypt hashes or passwords against a wordlist utilizing all CPU cores:
+Audit lists of hashes (Bcrypt, Argon2, PBKDF2) or passwords against plain or compressed wordlists utilizing all CPU cores:
 
 ```bash
-# Audit hashes using 8 worker processes
-crackerjack audit hashes.txt --wordlist rockyou.txt --workers 8
+# Audit hashes using 8 worker processes and a gzip-compressed wordlist
+crackerjack audit hashes.txt --wordlist rockyou.txt.gz --workers 8
 
-# Audit a single bcrypt hash
-crackerjack audit '$2b$12$...' --wordlist data/samplewords.txt
+# Audit a single hash (auto-detects Bcrypt, Argon2id, PBKDF2)
+crackerjack audit '$argon2id$v=19$...' --wordlist data/samplewords.txt
 
 # Disable rule mutations for faster exact-match auditing
 crackerjack audit hashes.txt --wordlist rockyou.txt --no-rules
@@ -96,24 +107,31 @@ crackerjack audit hashes.txt --wordlist rockyou.txt --output results.json
 
 ---
 
-### 3. Generate Secure Bcrypt Hashes (`hash`)
-Generate cryptographically strong bcrypt hashes with custom cost factors:
+### 3. Generate Secure Hashes (`hash`)
+Generate cryptographically strong hashes with custom algorithms and cost factors:
 
 ```bash
-# Generate default cost 12 bcrypt hash
-crackerjack hash "mySuperSecretPassphrase"
+# Bcrypt (default, cost rounds 4-31)
+crackerjack hash "mySuperSecretPassphrase" --algo bcrypt --cost 12
 
-# Customize work factor (rounds 4-31)
-crackerjack hash "mySuperSecretPassphrase" --cost 14
+# Argon2id (modern memory-hard KDF)
+crackerjack hash "mySuperSecretPassphrase" --algo argon2id --cost 2
+
+# PBKDF2-HMAC-SHA256 (NIST approved key stretching)
+crackerjack hash "mySuperSecretPassphrase" --algo pbkdf2-sha256 --cost 100000
 ```
 
 ---
 
 ### 4. Benchmark Multi-Core CPU Performance (`benchmark`)
-Compare single-core baseline vs multi-core throughput on your machine:
+Compare single-core baseline vs multi-core throughput on your machine across algorithms:
 
 ```bash
-crackerjack benchmark --cost 10 --rounds 16
+# Benchmark Bcrypt
+crackerjack benchmark --algo bcrypt --cost 10 --rounds 16
+
+# Benchmark PBKDF2
+crackerjack benchmark --algo pbkdf2-sha256 --cost 50000 --rounds 16
 ```
 
 ---
@@ -133,13 +151,14 @@ crackerjack/
 ├── requirements.txt            # Pinned dependencies
 ├── src/
 │   └── crackerjack/
-│       ├── __init__.py         # Package version (v3.0.0)
+│       ├── __init__.py         # Package version (v3.1.0)
 │       ├── __main__.py         # python -m crackerjack entry point
 │       ├── cli.py              # Typer command definitions
-│       ├── auditor.py          # NIST SP 800-63B policy grader & entropy calculator
+│       ├── auditor.py          # NIST SP 800-63B policy grader, context checks & entropy
 │       ├── breach.py           # HaveIBeenPwned k-anonymity client
-│       ├── engine.py           # Multi-core multiprocessing bcrypt engine
-│       ├── rules.py            # Password mutation rules & permutations
+│       ├── engine.py           # Multi-core multiprocessing engine (Argon2, PBKDF2, Bcrypt)
+│       ├── wordlist.py         # Zero-RAM streaming loader (.txt, .gz, .bz2, .xz)
+│       ├── rules.py            # Password mutation rules & generators
 │       ├── ui.py               # Rich terminal visual components & tables
 │       └── models.py           # Strongly-typed dataclasses
 ├── tests/                      # Pytest automated test suite
@@ -147,7 +166,8 @@ crackerjack/
 │   ├── test_breach.py
 │   ├── test_cli.py
 │   ├── test_engine.py
-│   └── test_rules.py
+│   ├── test_rules.py
+│   └── test_wordlist.py
 └── data/                       # Wordlists & sample dictionaries
 ```
 

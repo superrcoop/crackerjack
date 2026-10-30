@@ -133,6 +133,15 @@ def render_password_health(report: PasswordHealthReport) -> None:
         breach_text = "[bold green]Clean (0 known breaches)[/bold green]"
     table.add_row("HaveIBeenPwned Breach", breach_text, "k-Anonymity SHA-1 lookup")
 
+    # Context Terms Match (NIST SP 800-63B)
+    if nist.has_context_words:
+        terms_str = ", ".join(nist.matched_context_terms)
+        table.add_row(
+            "Context-Specific Match",
+            f"[bold red]Matched: {terms_str}[/bold red]",
+            "NIST: Disallows applicant/service names",
+        )
+
     # Score & Grade
     table.add_row(
         "NIST Compliance Grade",
@@ -175,11 +184,12 @@ def create_audit_progress() -> Progress:
 def render_audit_results(results: Sequence[HashAuditResult]) -> None:
     """Render a table summarizing the results of auditing target hashes."""
     table = Table(
-        title="Bcrypt Hash Audit Results",
+        title="Multi-Core Hash Audit Results",
         box=box.ROUNDED,
         header_style="bold cyan",
     )
     table.add_column("Target Hash", style="dim", overflow="ellipsis", max_width=32)
+    table.add_column("Algorithm", justify="center", style="cyan", width=10)
     table.add_column("Status", justify="center", width=12)
     table.add_column("Recovered Plaintext", style="bold yellow")
     table.add_column("Attempts", justify="right")
@@ -191,6 +201,7 @@ def render_audit_results(results: Sequence[HashAuditResult]) -> None:
         pw_text = res.plaintext if res.cracked else "[dim]Not in wordlist[/dim]"
         table.add_row(
             res.target_hash,
+            res.hash_type.upper(),
             status_text,
             pw_text,
             f"{res.attempts:,}",
@@ -226,7 +237,7 @@ def render_benchmark(res: BenchmarkResult) -> None:
         Panel(
             f"[bold green]Multi-core multiprocessing achieves a {res.speedup:.1f}x speedup[/bold green] "
             f"across {res.workers} CPU cores.\n"
-            f"Bcrypt operations scale near-linearly with available hardware execution units.",
+            f"{res.algorithm.upper()} operations scale near-linearly with available hardware execution units.",
             border_style="green",
             box=box.ROUNDED,
         )

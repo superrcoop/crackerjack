@@ -1,6 +1,5 @@
 """Tests for NIST SP 800-63B policy auditor and entropy calculator."""
 
-import pytest
 from crackerjack.auditor import (
     calculate_entropy,
     detect_composition,
@@ -68,3 +67,33 @@ def test_entropy_penalties():
     raw, eff = calculate_entropy("12345678", comp)
     # Sequential pattern penalty should reduce effective entropy
     assert eff < raw
+
+
+def test_detect_context_words():
+    from crackerjack.auditor import detect_context_words
+
+    context = ["acme", "johndoe", "github"]
+
+    # Direct match
+    assert "acme" in detect_context_words("Welcome2AcmeCorp!", context)
+    assert "johndoe" in detect_context_words("johndoe2026", context)
+
+    # Leetspeak match (@ for a, 3 for e)
+    assert "acme" in detect_context_words("@cm3_secure_pass", context)
+
+    # Reverse match
+    assert "acme" in detect_context_words("emca_pass_2026", context)
+
+    # Unrelated
+    assert detect_context_words("completely_unrelated_passphrase", context) == []
+
+
+def test_nist_evaluation_with_context_penalty():
+    # Passphrase that would otherwise be strong, but contains the applicant's company name
+    eval_no_context = evaluate_password("AcmeCorporationSecure#2026!")
+    eval_with_context = evaluate_password("AcmeCorporationSecure#2026!", context_terms=["acme"])
+
+    assert eval_with_context.has_context_words is True
+    assert "acme" in eval_with_context.matched_context_terms
+    assert eval_with_context.score < eval_no_context.score
+    assert any("context-specific" in rec for rec in eval_with_context.recommendations)

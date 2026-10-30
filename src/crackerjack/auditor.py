@@ -96,6 +96,39 @@ def detect_dictionary_root(password: str) -> bool:
     return False
 
 
+def detect_context_words(password: str, context_terms: list[str] | None = None) -> list[str]:
+    """Check if password contains any context-specific terms (usernames, company, service).
+
+    Per NIST SP 800-63B Section 5.1.1.2: prospective secrets must be compared against
+    values provided by the applicant (e.g. username, company name, service name).
+    """
+    if not context_terms:
+        return []
+
+    lowered = password.lower()
+    normalized = normalize_leetspeak(password)
+    matches: list[str] = []
+
+    for term in context_terms:
+        clean_term = term.strip().lower()
+        if len(clean_term) < 3:
+            continue
+        # Direct substring match
+        if clean_term in lowered:
+            matches.append(term)
+            continue
+        # Leetspeak match
+        if clean_term in normalized:
+            matches.append(term)
+            continue
+        # Reverse match
+        if clean_term[::-1] in lowered or clean_term[::-1] in normalized:
+            matches.append(term)
+            continue
+
+    return list(dict.fromkeys(matches))  # Preserve unique order
+
+
 def calculate_entropy(password: str, composition: CompositionFlags) -> tuple[float, float]:
     """Calculate raw entropy and penalized effective entropy in bits."""
     length = len(password)
@@ -127,8 +160,13 @@ def calculate_entropy(password: str, composition: CompositionFlags) -> tuple[flo
     return max(0.0, raw_entropy), max(0.0, effective)
 
 
-def evaluate_password(password: str) -> NISTEvaluation:
-    """Perform a full NIST SP 800-63B evaluation of a plaintext password."""
+def evaluate_password(password: str, context_terms: list[str] | None = None) -> NISTEvaluation:
+    """Perform a full NIST SP 800-63B evaluation of a plaintext password.
+
+    Args:
+        password: The plaintext candidate password.
+        context_terms: Optional list of context words (username, service name, organization).
+    """
     length = len(password)
     composition = detect_composition(password)
     passed_min_length = length >= 8
@@ -136,8 +174,12 @@ def evaluate_password(password: str) -> NISTEvaluation:
     has_repetitive = detect_repetition(password)
     has_sequential = detect_sequential_patterns(password)
     is_dictionary = detect_dictionary_root(password)
+    matched_context = detect_context_words(password, context_terms)
+    has_context = bool(matched_context)
 
     raw_entropy, effective_entropy = calculate_entropy(password, composition)
+    if has_context:
+        effective_entropy *= 0.60
 
     recommendations: list[str] = []
 
@@ -178,6 +220,12 @@ def evaluate_password(password: str) -> NISTEvaluation:
     if is_dictionary:
         score -= 25
         recommendations.append("Avoid common dictionary roots and easily guessable terms (even with leetspeak substitutions).")
+    if has_context:
+        score -= 30
+        recommendations.append(
+            f"Avoid context-specific terms ({', '.join(matched_context)}). "
+            f"NIST SP 800-63B requires rejecting words associated with the applicant, service, or organization."
+        )
 
     if not meets_recommended_length and passed_min_length:
         recommendations.append("Consider increasing length to 15+ characters (e.g. a multi-word passphrase).")
@@ -210,6 +258,8 @@ def evaluate_password(password: str) -> NISTEvaluation:
         has_repetitive_pattern=has_repetitive,
         has_sequential_pattern=has_sequential,
         is_dictionary_word=is_dictionary,
+        has_context_words=has_context,
+        matched_context_terms=matched_context,
         composition=composition,
         score=score,
         grade=grade,
