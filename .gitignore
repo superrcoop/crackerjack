@@ -1,4 +1,23 @@
+# Environments
 venv/
-*.pyc
-.DS_Store
+.venv/
+env/
+.env
 
+# Python bytecode & cache
+__pycache__/
+*.py[cod]
+*$py.class
+.pytest_cache/
+.coverage
+htmlcov/
+
+# Build & packaging
+dist/
+build/
+*.egg-info/
+*.egg
+
+# Operating System files
+.DS_Store
+Thumbs.db

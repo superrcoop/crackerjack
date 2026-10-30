@@ -1,0 +1,65 @@
+[build-system]
+requires = ["setuptools>=61.0", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "crackerjack-audit"
+version = "3.0.0"
+description = "Crackerjack 3.0: Modern Multi-Core Password Health Auditor & NIST SP 800-63B Compliance Checker"
+readme = "README.md"
+authors = [
+    { name = "Crackerjack Community" }
+]
+license = "GPL-3.0-only"
+requires-python = ">=3.11"
+keywords = [
+    "security",
+    "password-audit",
+    "nist-sp-800-63b",
+    "haveibeenpwned",
+    "bcrypt",
+    "entropy",
+    "multiprocessing",
+    "cli"
+]
+classifiers = [
+    "Development Status :: 5 - Production/Stable",
+    "Environment :: Console",
+    "Intended Audience :: Information Technology",
+    "Intended Audience :: System Administrators",
+    "Operating System :: OS Independent",
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3.11",
+    "Programming Language :: Python :: 3.12",
+    "Programming Language :: Python :: 3.13",
+    "Programming Language :: Python :: 3.14",
+    "Topic :: Security",
+    "Topic :: Security :: Cryptography"
+]
+dependencies = [
+    "typer>=0.9.0",
+    "rich>=13.0.0",
+    "bcrypt>=4.0.0",
+    "httpx>=0.25.0"
+]
+
+[project.optional-dependencies]
+dev = [
+    "pytest>=8.0.0",
+    "build>=1.0.0"
+]
+
+[project.scripts]
+crackerjack = "crackerjack.cli:app"
+crackerjack-audit = "crackerjack.cli:app"
+
+[project.urls]
+Homepage = "https://github.com/superrcoop/crackerjack"
+Repository = "https://github.com/superrcoop/crackerjack"
+
+[tool.setuptools.packages.find]
+where = ["src"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+pythonpath = ["src"]
