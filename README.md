@@ -20,6 +20,16 @@
 
 ---
 
+## ⚠️ Responsible Use & Security Disclaimer
+
+**Crackerjack is designed and maintained exclusively for authorized security auditing, defensive credential hygiene, academic research, and policy compliance verification against NIST SP 800-63B guidelines.**
+
+- **Authorized Testing Only**: Only audit systems, password hashes, and environments that you own or have explicit, documented authorization to assess.
+- **Privacy First**: The HaveIBeenPwned breach verification utilizes k-anonymity (transmitting only a 5-character SHA-1 prefix over TLS); full plaintext passwords are never transmitted. When checking sensitive secrets locally, prefer passing values via standard input (`--stdin`) to prevent storage in shell histories.
+- **Liability Disclaimer**: The authors and contributors assume no liability and are not responsible for any misuse, damage, or unauthorized activities resulting from this software. See the [GNU General Public License v3.0](LICENSE) for full warranty disclaimers.
+
+---
+
 ## Key Features
 
 - ⚡ **Multi-Core Multi-Algorithm Multiprocessing Engine**: CPU-bound memory-hard password hashing is distributed across all available CPU cores (e.g. Apple Silicon M-series performance and efficiency cores), achieving up to 4x–8x throughput speedups. Auto-detects and audits:
