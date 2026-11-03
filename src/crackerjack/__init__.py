@@ -1,6 +1,6 @@
-"""Crackerjack 3.3: Continuous Identity Security, Active Deception & Compliance Platform."""
+"""Crackerjack 3.4: Continuous Identity Security, Active Deception & Ephemeral Vault Platform."""
 
-__version__ = "3.3.0"
+__version__ = "3.4.0"
 __author__ = "Crackerjack Community"
 __license__ = "GPL-3.0"
 

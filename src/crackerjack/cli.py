@@ -5,6 +5,10 @@ from __future__ import annotations
 import json
 import os
 import sys
+import time
+import urllib.error
+import urllib.parse
+import urllib.request
 from pathlib import Path
 from typing import Annotated, Optional
 
@@ -49,6 +53,7 @@ from crackerjack.ui import (
     render_scan_results,
     show_banner,
 )
+from crackerjack.vault import decrypt_secret, encrypt_secret, parse_vault_url
 from crackerjack.webhooks import dispatch_webhook
 from crackerjack.wordlist import stream_candidates
 
@@ -848,4 +853,184 @@ def honey_verify(
 
 
 app.add_typer(honey_app, name="honey")
+
+
+# ---------------------------------------------------------------------------
+# Ephemeral Secret Vault & Self-Destructing Link CLI
+# ---------------------------------------------------------------------------
+
+vault_app = typer.Typer(
+    name="vault",
+    help="Zero-knowledge ephemeral secret vault & self-destructing links.",
+    no_args_is_help=True,
+)
+
+
+def _parse_ttl(ttl_str: str) -> int:
+    """Parse human readable TTL string (e.g. 5m, 1h, 24h, 7d) into seconds."""
+    s = ttl_str.strip().lower()
+    if s.endswith("m"):
+        return int(s[:-1]) * 60
+    elif s.endswith("h"):
+        return int(s[:-1]) * 3600
+    elif s.endswith("d"):
+        return int(s[:-1]) * 86400
+    elif s.endswith("s"):
+        return int(s[:-1])
+    try:
+        return int(s)
+    except ValueError:
+        return 3600
+
+
+@vault_app.command(name="send")
+def vault_send(
+    secret: Annotated[
+        Optional[str],
+        typer.Argument(
+            help="Plaintext secret or credential to encrypt (reads from stdin if omitted or piped)"
+        ),
+    ] = None,
+    burn: Annotated[
+        bool,
+        typer.Option("--burn/--no-burn", help="Burn secret immediately upon first read"),
+    ] = True,
+    ttl: Annotated[
+        str,
+        typer.Option("--ttl", "-t", help="Time-to-live expiration (e.g., 5m, 15m, 1h, 24h, 7d)"),
+    ] = "1h",
+    allow_ip: Annotated[
+        Optional[str],
+        typer.Option("--allow-ip", help="Restrict decryption access to specific client IP"),
+    ] = None,
+    server: Annotated[
+        str,
+        typer.Option("--server", help="Vault endpoint server URL"),
+    ] = "https://crackerjack-security.pages.dev",
+) -> None:
+    """Encrypt a secret client-side with AES-256-GCM and generate a self-destructing link."""
+    content = secret
+    if content is None:
+        if not sys.stdin.isatty():
+            content = sys.stdin.read().rstrip("\r\n")
+        else:
+            content = typer.prompt("Enter secret to encrypt", hide_input=True)
+
+    if not content:
+        console.print("[red]Error: Cannot share an empty secret.[/red]")
+        raise typer.Exit(code=1)
+
+    ttl_seconds = _parse_ttl(ttl)
+    payload, key_b64 = encrypt_secret(
+        plaintext=content,
+        ttl_seconds=ttl_seconds,
+        burn_on_read=burn,
+        allow_ip=allow_ip,
+    )
+
+    server_base = server.rstrip("/")
+    api_url = f"{server_base}/v1/vault"
+
+    try:
+        req = urllib.request.Request(
+            api_url,
+            data=json.dumps(payload).encode("utf-8"),
+            headers={
+                "Content-Type": "application/json",
+                "User-Agent": f"CrackerjackCLI/{__version__}",
+            },
+            method="POST",
+        )
+        with urllib.request.urlopen(req, timeout=12) as resp:
+            if resp.status not in (200, 201):
+                console.print(f"[red]Error from vault server: HTTP {resp.status}[/red]")
+                raise typer.Exit(code=1)
+    except urllib.error.URLError as e:
+        console.print(f"[red]Connection error to vault server ({api_url}): {e}[/red]")
+        raise typer.Exit(code=1)
+
+    vault_url = f"{server_base}/#vault?id={payload['id']}&key={key_b64}"
+    expires_time_str = time.strftime("%Y-%m-%d %H:%M:%S UTC", time.gmtime(payload["expires_at"]))
+
+    panel_text = (
+        f"[bold green]✔ Secret Encrypted Client-Side (AES-256-GCM)[/bold green]\n\n"
+        f"[bold cyan]Zero-Knowledge Vault Link:[/bold cyan]\n"
+        f"  [bold underline white]{vault_url}[/bold underline white]\n\n"
+        f"[bold]Secret ID:[/bold] {payload['id']}\n"
+        f"[bold]Self-Destruct:[/bold] {'🔥 YES (burns permanently on first read)' if burn else 'NO (persists until TTL)'}\n"
+        f"[bold]Expires At:[/bold] {expires_time_str} ({ttl})\n"
+        f"[bold]IP Geofence:[/bold] {allow_ip if allow_ip else 'Worldwide (unrestricted)'}\n\n"
+        f"[dim]Note: Decryption key is located only in the URL hash fragment (#key=...) and was never transmitted to any server.[/dim]"
+    )
+    console.print(Panel(panel_text, title="[bold]Crackerjack Ephemeral Secret Vault[/bold]", border_style="cyan"))
+
+
+@vault_app.command(name="fetch")
+def vault_fetch(
+    url: Annotated[
+        str,
+        typer.Argument(help="Zero-knowledge Vault URL containing #vault?id=...&key=..."),
+    ],
+    server: Annotated[
+        Optional[str],
+        typer.Option("--server", help="Override server URL if different from link origin"),
+    ] = None,
+) -> None:
+    """Fetch an encrypted secret and decrypt it client-side with the fragment key."""
+    try:
+        secret_id, key_b64 = parse_vault_url(url)
+    except ValueError as ve:
+        console.print(f"[red]Invalid Vault URL: {ve}[/red]")
+        raise typer.Exit(code=1)
+
+    server_base = server.rstrip("/") if server else ""
+    if not server_base:
+        parsed = urllib.parse.urlparse(url)
+        if parsed.scheme and parsed.netloc:
+            server_base = f"{parsed.scheme}://{parsed.netloc}"
+        else:
+            server_base = "https://crackerjack-security.pages.dev"
+
+    api_url = f"{server_base}/v1/vault/{secret_id}"
+    try:
+        req = urllib.request.Request(
+            api_url,
+            headers={"User-Agent": f"CrackerjackCLI/{__version__}"},
+            method="GET",
+        )
+        with urllib.request.urlopen(req, timeout=12) as resp:
+            data = json.loads(resp.read().decode("utf-8"))
+    except urllib.error.HTTPError as he:
+        if he.code == 404:
+            console.print("[red]Error: Secret not found, expired, or already burned.[/red]")
+        elif he.code == 403:
+            console.print("[red]Error: Access denied: Client IP address not permitted to decrypt this secret.[/red]")
+        else:
+            console.print(f"[red]HTTP Error {he.code}: {he.reason}[/red]")
+        raise typer.Exit(code=1)
+    except Exception as e:
+        console.print(f"[red]Connection error to vault server: {e}[/red]")
+        raise typer.Exit(code=1)
+
+    ciphertext_b64 = data.get("ciphertext", "")
+    try:
+        plaintext = decrypt_secret(ciphertext_b64, key_b64)
+    except Exception as e:
+        console.print(f"[red]Decryption failed: {e}[/red]")
+        raise typer.Exit(code=1)
+
+    if not sys.stdout.isatty():
+        sys.stdout.write(plaintext)
+        sys.stdout.flush()
+    else:
+        burn_msg = "🔥 [bold red]DESTROYED ON SERVER[/bold red]" if data.get("burn_on_read") else "[yellow]Persists until TTL[/yellow]"
+        panel_content = (
+            f"[bold green]Decrypted Secret Content:[/bold green]\n\n"
+            f"{plaintext}\n\n"
+            f"[dim]Status: {burn_msg}[/dim]"
+        )
+        console.print(Panel(panel_content, title="[bold]Crackerjack Vault Secret[/bold]", border_style="green"))
+
+
+app.add_typer(vault_app, name="vault")
 

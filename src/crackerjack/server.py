@@ -11,6 +11,7 @@ from typing import Any
 from crackerjack import __version__
 from crackerjack.auditor import evaluate_password
 from crackerjack.generator import generate_passphrase
+from crackerjack.vault import GLOBAL_VAULT
 
 
 def get_openapi_spec() -> dict[str, Any]:
@@ -102,6 +103,52 @@ def get_openapi_spec() -> dict[str, Any]:
                         },
                     },
                     "responses": {"200": {"description": "Generated passphrase"}},
+                }
+            },
+            "/v1/vault": {
+                "post": {
+                    "summary": "Store zero-knowledge encrypted ephemeral secret (client-side AES-256-GCM)",
+                    "requestBody": {
+                        "required": True,
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "type": "object",
+                                    "properties": {
+                                        "id": {"type": "string", "example": "vlt_8fa72c019a"},
+                                        "ciphertext": {"type": "string", "description": "URL-safe base64 combined IV + ciphertext + tag"},
+                                        "burn_on_read": {"type": "boolean", "default": True},
+                                        "expires_at": {"type": "integer", "description": "Unix timestamp in seconds"},
+                                        "allow_ip": {"type": "string", "nullable": True, "description": "Optional IP or CIDR mask"},
+                                    },
+                                    "required": ["id", "ciphertext", "expires_at"],
+                                }
+                            }
+                        },
+                    },
+                    "responses": {
+                        "201": {"description": "Secret stored in ephemeral memory"},
+                        "400": {"description": "Invalid payload"},
+                    },
+                }
+            },
+            "/v1/vault/{id}": {
+                "get": {
+                    "summary": "Fetch and optionally self-destruct an encrypted secret",
+                    "parameters": [
+                        {
+                            "name": "id",
+                            "in": "path",
+                            "required": True,
+                            "schema": {"type": "string"},
+                            "description": "Unique secret identifier",
+                        }
+                    ],
+                    "responses": {
+                        "200": {"description": "Encrypted secret payload"},
+                        "403": {"description": "Access denied: IP geofence restriction violated"},
+                        "404": {"description": "Secret not found, expired, or already burned"},
+                    },
                 }
             },
         },
@@ -200,6 +247,27 @@ class CrackerjackRequestHandler(BaseHTTPRequestHandler):
             self._send_cors_headers()
             self.end_headers()
             self.wfile.write(html)
+        elif path.startswith("/v1/vault/"):
+            secret_id = path[len("/v1/vault/"):].strip("/")
+            if not secret_id:
+                self._send_json_response(HTTPStatus.BAD_REQUEST, {"error": "Missing secret ID in path"})
+                return
+            client_ip = (
+                self.headers.get("CF-Connecting-IP")
+                or self.headers.get("X-Forwarded-For", "").split(",")[0].strip()
+                or (self.client_address[0] if hasattr(self, "client_address") and self.client_address else None)
+            )
+            try:
+                record = GLOBAL_VAULT.get(secret_id, client_ip=client_ip)
+                if not record:
+                    self._send_json_response(
+                        HTTPStatus.NOT_FOUND,
+                        {"error": "Secret not found, expired, or already burned."},
+                    )
+                else:
+                    self._send_json_response(HTTPStatus.OK, record)
+            except PermissionError as pe:
+                self._send_json_response(HTTPStatus.FORBIDDEN, {"error": str(pe)})
         else:
             self._send_json_response(HTTPStatus.NOT_FOUND, {"error": "Not found", "path": path})
 
@@ -225,6 +293,8 @@ class CrackerjackRequestHandler(BaseHTTPRequestHandler):
             self._handle_validate(body)
         elif path == "/v1/generate":
             self._handle_generate(body)
+        elif path == "/v1/vault":
+            self._handle_vault(body)
         else:
             self._send_json_response(HTTPStatus.NOT_FOUND, {"error": "Not found", "path": path})
 
@@ -346,6 +416,20 @@ class CrackerjackRequestHandler(BaseHTTPRequestHandler):
         )
         self._send_json_response(HTTPStatus.OK, generated.to_dict())
 
+    def _handle_vault(self, body: dict[str, Any]) -> None:
+        secret_id = body.get("id")
+        ciphertext = body.get("ciphertext")
+        expires_at = body.get("expires_at")
+        if not secret_id or not ciphertext or not expires_at:
+            self._send_json_response(
+                HTTPStatus.BAD_REQUEST,
+                {"error": "Missing required fields ('id', 'ciphertext', 'expires_at') for vault secret."},
+            )
+            return
+
+        record = GLOBAL_VAULT.put(body)
+        self._send_json_response(HTTPStatus.CREATED, record)
+
     def log_message(self, format: str, *args: Any) -> None:
         """Suppress default stderr HTTP request logging for clean terminal output."""
         return
@@ -366,6 +450,8 @@ def run_server(host: str = "0.0.0.0", port: int = 8000) -> None:
     print(f"   - POST /v1/validate")
     print(f"   - POST /v1/evaluate")
     print(f"   - POST /v1/generate")
+    print(f"   - POST /v1/vault")
+    print(f"   - GET  /v1/vault/{{id}}")
     print(f"   - GET  /openapi.json")
     try:
         server.serve_forever()

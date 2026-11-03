@@ -1023,6 +1023,151 @@ html.intro .hero h1 .ln span {
   background: var(--red);
 }
 .badge-score.pass { background: #16a34a; }
+
+/* -------------------------------------------------------------------------
+   Vault UI Tokens & Modal Elements
+   ------------------------------------------------------------------------- */
+.vault-tabs {
+  display: flex;
+  gap: calc(12 * var(--s));
+  margin-bottom: calc(24 * var(--s));
+  border-bottom: 1px solid rgba(255, 255, 255, 0.12);
+  padding-bottom: calc(12 * var(--s));
+}
+.vault-tab-btn {
+  font-family: 'SG', sans-serif;
+  font-size: calc(15 * var(--s));
+  font-weight: 600;
+  background: none;
+  border: none;
+  color: var(--lab);
+  padding: calc(6 * var(--s)) calc(14 * var(--s));
+  cursor: pointer;
+  position: relative;
+  transition: all 0.2s ease;
+}
+.vault-tab-btn:hover {
+  color: #fff;
+}
+.vault-tab-btn.active {
+  color: #fff;
+}
+.vault-tab-btn.active::after {
+  content: '';
+  position: absolute;
+  bottom: calc(-13 * var(--s));
+  left: 0;
+  right: 0;
+  height: 2px;
+  background: var(--red);
+}
+.vault-pill {
+  display: inline-flex;
+  align-items: center;
+  font-family: 'JB', monospace;
+  font-size: calc(11 * var(--s));
+  padding: calc(3 * var(--s)) calc(8 * var(--s));
+  border-radius: 2px;
+  background: rgba(255, 255, 255, 0.06);
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  color: #d1d5db;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+}
+.vault-pill.live {
+  background: rgba(200, 27, 28, 0.18);
+  border-color: rgba(200, 27, 28, 0.4);
+  color: #ff8080;
+}
+.vault-pill.safe {
+  background: rgba(22, 163, 74, 0.18);
+  border-color: rgba(22, 163, 74, 0.4);
+  color: #4ade80;
+}
+.vault-textarea {
+  width: 100%;
+  min-height: calc(130 * var(--s));
+  background: #000;
+  border: 1px solid rgba(255, 255, 255, 0.14);
+  color: #fff;
+  font-family: 'JB', monospace;
+  font-size: calc(13.5 * var(--s));
+  line-height: 1.5;
+  padding: calc(14 * var(--s));
+  resize: vertical;
+  outline: none;
+  transition: border-color 0.2s ease;
+}
+.vault-textarea:focus {
+  border-color: var(--red);
+  box-shadow: 0 0 0 1px var(--red);
+}
+.vault-opts-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(calc(220 * var(--s)), 1fr));
+  gap: calc(16 * var(--s));
+  margin: calc(16 * var(--s)) 0;
+}
+.vault-banner {
+  padding: calc(14 * var(--s)) calc(18 * var(--s));
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  background: rgba(255, 255, 255, 0.03);
+  font-family: 'JB', monospace;
+  font-size: calc(12.5 * var(--s));
+  line-height: 1.5;
+  margin: calc(14 * var(--s)) 0;
+  display: flex;
+  align-items: flex-start;
+  gap: calc(12 * var(--s));
+}
+.vault-banner.burned {
+  border-color: rgba(200, 27, 28, 0.5);
+  background: rgba(200, 27, 28, 0.12);
+  color: #ff9999;
+}
+.vault-banner.success {
+  border-color: rgba(22, 163, 74, 0.5);
+  background: rgba(22, 163, 74, 0.12);
+  color: #86efac;
+}
+.vault-banner.warning {
+  border-color: rgba(234, 179, 8, 0.5);
+  background: rgba(234, 179, 8, 0.12);
+  color: #fde047;
+}
+.vault-link-box {
+  display: flex;
+  align-items: center;
+  background: #000;
+  border: 1px solid rgba(255, 255, 255, 0.2);
+  padding: calc(10 * var(--s)) calc(14 * var(--s));
+  gap: calc(10 * var(--s));
+  margin: calc(14 * var(--s)) 0;
+}
+.vault-link-box input {
+  flex: 1;
+  background: transparent;
+  border: none;
+  outline: none;
+  color: #fff;
+  font-family: 'JB', monospace;
+  font-size: calc(13 * var(--s));
+}
+.vault-copy-btn {
+  background: rgba(255, 255, 255, 0.1);
+  border: 1px solid rgba(255, 255, 255, 0.2);
+  color: #fff;
+  font-family: 'JB', monospace;
+  font-size: calc(12 * var(--s));
+  padding: calc(6 * var(--s)) calc(12 * var(--s));
+  cursor: pointer;
+  white-space: nowrap;
+  transition: all 0.15s ease;
+}
+.vault-copy-btn:hover {
+  background: var(--red);
+  border-color: var(--red);
+}
 </style>
 
 <!-- Arm before paint: Immediately add intro class to html before first paint if WAAPI and motion allowed -->
@@ -1106,6 +1251,9 @@ html.intro .hero h1 .ln span {
       <!-- Desktop Nav (Clean, duplicate button removed) -->
       <nav>
         <a href="#" class="nav-link" onclick="closeAllModals(event)">Home</a>
+        <button class="nav-link" onclick="openModal('modal-vault')" style="display:inline-flex; align-items:center; gap:calc(6 * var(--s));">
+          <span style="display:inline-block; width:6px; height:6px; background:var(--red); border-radius:50%;"></span>Vault
+        </button>
         <button class="nav-link" onclick="openModal('modal-resources')">
           Resources
           <svg class="chv" viewBox="0 0 11 6"><path d="M1 1L5.5 5L10 1"/></svg>
@@ -1185,6 +1333,11 @@ html.intro .hero h1 .ln span {
             <button class="sublink" onclick="closeMenu(); openModal('modal-benefits', 'access');">Access control</button>
             <button class="sublink" onclick="closeMenu(); openModal('modal-benefits', 'incident');">Incident response</button>
           </div>
+        </li>
+        <li class="menu-item">
+          <button class="mrow" onclick="closeMenu(); openModal('modal-vault');">
+            <span style="color:var(--red); font-size:12px; margin-right:8px;">●</span>Ephemeral Vault
+          </button>
         </li>
         <li class="menu-item">
           <button class="mrow" onclick="closeMenu(); openModal('modal-pricing');">Pricing</button>
@@ -1523,6 +1676,138 @@ curl -X POST http://localhost:8000/v1/validate \
 </div>
 
 <!-- =========================================================================
+     MODAL 5: EPHEMERAL ZERO-KNOWLEDGE SECRET VAULT
+     ========================================================================= -->
+<div class="modal-layer" id="modal-vault" role="dialog" aria-modal="true" aria-labelledby="modal-vault-title">
+  <div class="modal-box" style="max-width:calc(860 * var(--s));">
+    <div class="modal-top-accent"></div>
+    <div class="modal-header">
+      <div class="modal-title-wrap">
+        <h2 id="modal-vault-title">Ephemeral Secret Vault</h2>
+        <div class="modal-tagline">Zero-Knowledge Client-Side AES-256-GCM Encryption & Self-Destruction</div>
+      </div>
+      <div style="display:flex; align-items:center; gap:calc(8 * var(--s));">
+        <span class="vault-pill live">AES-256-GCM</span>
+        <button class="modal-close" onclick="closeModal('modal-vault')" aria-label="Close modal">✕</button>
+      </div>
+    </div>
+    <div class="modal-body">
+      <!-- Subtabs -->
+      <div class="vault-tabs">
+        <button id="vault-tab-share-btn" class="vault-tab-btn active" onclick="switchVaultTab('share')">Share a Secret</button>
+        <button id="vault-tab-decrypt-btn" class="vault-tab-btn" onclick="switchVaultTab('decrypt')">Decrypt Secret</button>
+      </div>
+
+      <!-- TAB 1: SHARE A SECRET -->
+      <div id="vault-pane-share">
+        <p style="font-size:calc(13.5 * var(--s)); color:var(--lab); margin-bottom:calc(14 * var(--s));">
+          Encrypt credentials, database passwords, SSH keys, or staging <code style="color:#fff;">.env</code> snippets locally in your browser.
+          The 256-bit encryption key remains entirely in the URL fragment hash (<code style="color:#fff;">#key=...</code>) and is never transmitted to our servers or stored on disk.
+        </p>
+
+        <label class="form-label" for="vault-input-secret">Secret Content to Encrypt *</label>
+        <textarea id="vault-input-secret" class="vault-textarea" placeholder="Paste .env tokens, private keys, database passwords, or confidential snippets..."></textarea>
+
+        <div class="vault-opts-grid">
+          <div>
+            <label class="form-label" for="vault-opt-ttl">Expiration (TTL)</label>
+            <select id="vault-opt-ttl" class="form-select">
+              <option value="300">5 Minutes</option>
+              <option value="900">15 Minutes</option>
+              <option value="3600" selected>1 Hour (Default)</option>
+              <option value="86400">24 Hours</option>
+              <option value="604800">7 Days</option>
+            </select>
+          </div>
+          <div>
+            <label class="form-label" for="vault-opt-ip">Client IP Geofence (Optional)</label>
+            <input type="text" id="vault-opt-ip" class="form-input" placeholder="e.g. 203.0.113.195 or empty">
+          </div>
+        </div>
+
+        <div style="margin-bottom:calc(18 * var(--s)); display:flex; align-items:center; gap:calc(10 * var(--s));">
+          <input type="checkbox" id="vault-opt-burn" checked style="accent-color:var(--red); width:calc(18 * var(--s)); height:calc(18 * var(--s)); cursor:pointer;">
+          <label for="vault-opt-burn" style="font-family:'JB', monospace; font-size:calc(13 * var(--s)); color:#fff; cursor:pointer;">
+            Burn-on-Read: <span style="color:var(--lab);">Permanently delete from server memory the moment it is fetched</span>
+          </label>
+        </div>
+
+        <button type="button" class="btn" style="width:100%; max-width:calc(280 * var(--s));" onclick="handleVaultEncryptSubmit()">
+          <span class="btn-lbl">Encrypt & Create Link</span>
+          <svg class="btn-arr" viewBox="0 0 21.5 18">
+            <path d="M0 9H20.1"/>
+            <path d="M12.1 1L20.1 9L12.1 17"/>
+          </svg>
+        </button>
+
+        <!-- Result Box (Generated Link) -->
+        <div id="vault-share-result" style="display:none; margin-top:calc(24 * var(--s));">
+          <div class="vault-banner success">
+            <span>✔</span>
+            <div>
+              <strong>Secret successfully encrypted with AES-256-GCM!</strong><br>
+              Share this one-time link with your recipient. The decryption key is embedded in the URL fragment (<code style="color:#fff;">#key=...</code>) and was never sent over the wire.
+            </div>
+          </div>
+
+          <label class="form-label">Zero-Knowledge One-Time Link</label>
+          <div class="vault-link-box">
+            <input type="text" id="vault-share-link" readonly onclick="this.select()">
+            <button class="vault-copy-btn" id="vault-copy-link-btn" onclick="copyVaultLink()">Copy Link</button>
+          </div>
+
+          <div style="margin-top:calc(12 * var(--s)); font-size:calc(12 * var(--s)); color:var(--lab);">
+            CLI Equivalent: <code style="color:#d1d5db;">cat .env | crackerjack vault send --burn --ttl 1h</code>
+          </div>
+        </div>
+      </div>
+
+      <!-- TAB 2: DECRYPT SECRET -->
+      <div id="vault-pane-decrypt" style="display:none;">
+        <div id="vault-decrypt-status" class="vault-banner" style="display:none;"></div>
+
+        <div id="vault-decrypt-form-manual" style="margin-bottom:calc(16 * var(--s));">
+          <p style="font-size:calc(13.5 * var(--s)); color:var(--lab); margin-bottom:calc(12 * var(--s));">
+            Opening a Vault link automatically decrypts the secret below. You can also manually decrypt by entering the ID and Key.
+          </p>
+          <div class="vault-opts-grid">
+            <div>
+              <label class="form-label" for="vault-inp-id">Secret ID (e.g., vlt_...)</label>
+              <input type="text" id="vault-inp-id" class="form-input" placeholder="vlt_8fa72c019a">
+            </div>
+            <div>
+              <label class="form-label" for="vault-inp-key">256-Bit Decryption Key (from #key=...)</label>
+              <input type="text" id="vault-inp-key" class="form-input" placeholder="Base64 URL-safe key">
+            </div>
+          </div>
+          <button type="button" class="btn" style="width:100%; max-width:calc(240 * var(--s)); margin-top:calc(10 * var(--s));" onclick="triggerManualDecrypt()">
+            <span class="btn-lbl">Decrypt Secret</span>
+          </button>
+        </div>
+
+        <!-- Decrypted Output Area -->
+        <div id="vault-decrypt-output-wrap" style="display:none; margin-top:calc(20 * var(--s));">
+          <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:calc(8 * var(--s));">
+            <label class="form-label" style="margin:0;">Decrypted Plaintext Secret</label>
+            <button class="vault-copy-btn" id="vault-copy-secret-btn" onclick="copyDecryptedSecret()">Copy Secret</button>
+          </div>
+          <textarea id="vault-decrypted-text" class="vault-textarea" readonly style="color:#4ade80;"></textarea>
+
+          <div id="vault-burn-alert" class="vault-banner burned" style="display:none;">
+            <span>🔥</span>
+            <div>
+              <strong>PERMANENTLY DESTROYED</strong><br>
+              This secret had burn-on-read enabled. The ciphertext has been permanently purged from server memory and cannot be reloaded or accessed ever again.
+            </div>
+          </div>
+        </div>
+      </div>
+
+    </div>
+  </div>
+</div>
+
+<!-- =========================================================================
      PAGE LOGIC: Video Synchronization, WAAPI Entrance, and Modals
      ========================================================================= -->
 <script>
@@ -1813,6 +2098,267 @@ async function runPlaygroundEval() {
   verdictEl.textContent = pass ? 'ACCEPTABLE' : 'ACTION REQUIRED';
   detailsEl.textContent = violations.length ? violations.join('; ') : 'No policy violations detected.';
 }
+
+/* -------------------------------------------------------------------------
+   6. Ephemeral Zero-Knowledge Secret Vault (Web Crypto AES-256-GCM)
+   ------------------------------------------------------------------------- */
+function bufToUrlB64(buffer) {
+  const bytes = new Uint8Array(buffer);
+  let binary = '';
+  for (let i = 0; i < bytes.byteLength; i++) {
+    binary += String.fromCharCode(bytes[i]);
+  }
+  return btoa(binary).replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '');
+}
+
+function urlB64ToBuf(str) {
+  let base64 = str.replace(/-/g, '+').replace(/_/g, '/');
+  while (base64.length % 4) {
+    base64 += '=';
+  }
+  const binary = atob(base64);
+  const bytes = new Uint8Array(binary.length);
+  for (let i = 0; i < binary.length; i++) {
+    bytes[i] = binary.charCodeAt(i);
+  }
+  return bytes;
+}
+
+function switchVaultTab(tab) {
+  const shareBtn = document.getElementById('vault-tab-share-btn');
+  const decryptBtn = document.getElementById('vault-tab-decrypt-btn');
+  const sharePane = document.getElementById('vault-pane-share');
+  const decryptPane = document.getElementById('vault-pane-decrypt');
+
+  if (tab === 'share') {
+    shareBtn.classList.add('active');
+    decryptBtn.classList.remove('active');
+    sharePane.style.display = 'block';
+    decryptPane.style.display = 'none';
+  } else {
+    decryptBtn.classList.add('active');
+    shareBtn.classList.remove('active');
+    decryptPane.style.display = 'block';
+    sharePane.style.display = 'none';
+  }
+}
+
+async function handleVaultEncryptSubmit() {
+  const secretText = document.getElementById('vault-input-secret').value;
+  if (!secretText || !secretText.trim()) {
+    alert('Please enter secret text or credentials to encrypt.');
+    return;
+  }
+
+  const ttl = parseInt(document.getElementById('vault-opt-ttl').value, 10) || 3600;
+  const burn = document.getElementById('vault-opt-burn').checked;
+  const allowIp = document.getElementById('vault-opt-ip').value.trim() || null;
+
+  try {
+    // 1. Generate 256-bit AES-GCM key
+    const key = await window.crypto.subtle.generateKey(
+      { name: 'AES-GCM', length: 256 },
+      true,
+      ['encrypt', 'decrypt']
+    );
+
+    // 2. Export raw key bytes and format URL-safe base64
+    const rawKey = await window.crypto.subtle.exportKey('raw', key);
+    const keyB64 = bufToUrlB64(rawKey);
+
+    // 3. Generate 12-byte CSPRNG IV
+    const iv = window.crypto.getRandomValues(new Uint8Array(12));
+
+    // 4. Encrypt plaintext
+    const enc = new TextEncoder();
+    const cipherBuffer = await window.crypto.subtle.encrypt(
+      { name: 'AES-GCM', iv: iv },
+      key,
+      enc.encode(secretText)
+    );
+
+    // 5. Combine: iv (12 bytes) + ciphertext + tag
+    const combined = new Uint8Array(iv.length + cipherBuffer.byteLength);
+    combined.set(iv, 0);
+    combined.set(new Uint8Array(cipherBuffer), iv.length);
+    const ciphertextB64 = bufToUrlB64(combined.buffer);
+
+    // 6. Generate secret ID & expiry
+    const randomHex = Array.from(window.crypto.getRandomValues(new Uint8Array(8)))
+      .map(b => b.toString(16).padStart(2, '0')).join('');
+    const secretId = `vlt_${randomHex}`;
+    const expiresAt = Math.floor(Date.now() / 1000) + ttl;
+
+    const payload = {
+      id: secretId,
+      ciphertext: ciphertextB64,
+      burn_on_read: burn,
+      expires_at: expiresAt,
+      allow_ip: allowIp,
+    };
+
+    // 7. Post ciphertext to API
+    const res = await fetch('/v1/vault', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(payload)
+    });
+
+    if (!res.ok) {
+      const errData = await res.json().catch(() => ({}));
+      throw new Error(errData.error || `HTTP ${res.status}`);
+    }
+
+    // 8. Build Zero-Knowledge link with key in hash fragment
+    const fullLink = `${window.location.origin}/#vault?id=${secretId}&key=${keyB64}`;
+    document.getElementById('vault-share-link').value = fullLink;
+    document.getElementById('vault-share-result').style.display = 'block';
+  } catch (err) {
+    alert(`Encryption failed: ${err.message}`);
+  }
+}
+
+function copyVaultLink() {
+  const linkInp = document.getElementById('vault-share-link');
+  linkInp.select();
+  navigator.clipboard.writeText(linkInp.value).then(() => {
+    const btn = document.getElementById('vault-copy-link-btn');
+    const originalText = btn.textContent;
+    btn.textContent = 'Copied!';
+    setTimeout(() => { btn.textContent = originalText; }, 2000);
+  });
+}
+
+function copyDecryptedSecret() {
+  const textEl = document.getElementById('vault-decrypted-text');
+  textEl.select();
+  navigator.clipboard.writeText(textEl.value).then(() => {
+    const btn = document.getElementById('vault-copy-secret-btn');
+    const originalText = btn.textContent;
+    btn.textContent = 'Copied!';
+    setTimeout(() => { btn.textContent = originalText; }, 2000);
+  });
+}
+
+async function decryptVaultPayload(secretId, keyB64) {
+  const statusEl = document.getElementById('vault-decrypt-status');
+  const outputWrap = document.getElementById('vault-decrypt-output-wrap');
+  const textEl = document.getElementById('vault-decrypted-text');
+  const burnAlert = document.getElementById('vault-burn-alert');
+
+  statusEl.className = 'vault-banner';
+  statusEl.style.display = 'flex';
+  statusEl.innerHTML = '<span>⏳</span><div>Fetching ciphertext from server...</div>';
+  outputWrap.style.display = 'none';
+  burnAlert.style.display = 'none';
+
+  try {
+    const res = await fetch(`/v1/vault/${encodeURIComponent(secretId)}`);
+    if (res.status === 404) {
+      statusEl.className = 'vault-banner burned';
+      statusEl.innerHTML = '<span>⚠️</span><div><strong>Secret Not Found or Expired:</strong> This secret has already been burned on read, expired past its TTL, or does not exist.</div>';
+      return;
+    }
+    if (res.status === 403) {
+      statusEl.className = 'vault-banner warning';
+      statusEl.innerHTML = '<span>⛔</span><div><strong>Access Denied:</strong> Your client IP address is not permitted to decrypt this secret due to geofencing policy.</div>';
+      return;
+    }
+    if (!res.ok) {
+      throw new Error(`Server returned HTTP ${res.status}`);
+    }
+
+    const data = await res.json();
+    const ciphertextB64 = data.ciphertext;
+
+    statusEl.innerHTML = '<span>🔐</span><div>Decrypting locally using Web Crypto API (AES-256-GCM)...</div>';
+
+    // Parse bytes
+    const combined = urlB64ToBuf(ciphertextB64);
+    const rawKey = urlB64ToBuf(keyB64);
+
+    if (rawKey.length !== 32) {
+      throw new Error('Invalid key length: AES-256 requires 32 bytes.');
+    }
+    if (combined.length < 28) {
+      throw new Error('Corrupted ciphertext: blob too short.');
+    }
+
+    const iv = combined.slice(0, 12);
+    const cipherWithTag = combined.slice(12);
+
+    const key = await window.crypto.subtle.importKey(
+      'raw',
+      rawKey,
+      { name: 'AES-GCM', length: 256 },
+      false,
+      ['decrypt']
+    );
+
+    const decryptedBuf = await window.crypto.subtle.decrypt(
+      { name: 'AES-GCM', iv: iv },
+      key,
+      cipherWithTag
+    );
+
+    const plaintext = new TextDecoder().decode(decryptedBuf);
+
+    textEl.value = plaintext;
+    outputWrap.style.display = 'block';
+
+    if (data.burn_on_read) {
+      statusEl.className = 'vault-banner burned';
+      statusEl.innerHTML = '<span>🔥</span><div><strong>Secret Burned on Read:</strong> Ciphertext destroyed from server memory. This secret cannot be accessed again.</div>';
+      burnAlert.style.display = 'flex';
+    } else {
+      statusEl.className = 'vault-banner success';
+      statusEl.innerHTML = '<span>✔</span><div><strong>Decryption Successful:</strong> Valid cryptographic verification passed.</div>';
+    }
+  } catch (err) {
+    statusEl.className = 'vault-banner burned';
+    statusEl.innerHTML = `<span>✕</span><div><strong>Decryption Failed:</strong> ${err.message}. Ciphertext may be corrupted or key is invalid.</div>`;
+  }
+}
+
+function triggerManualDecrypt() {
+  const secretId = document.getElementById('vault-inp-id').value.trim();
+  const keyB64 = document.getElementById('vault-inp-key').value.trim();
+  if (!secretId || !keyB64) {
+    alert('Please provide both Secret ID and 256-Bit Decryption Key.');
+    return;
+  }
+  decryptVaultPayload(secretId, keyB64);
+}
+
+function parseVaultHashParams() {
+  const hash = window.location.hash;
+  if (!hash.startsWith('#vault')) return null;
+
+  let queryStr = hash.includes('?') ? hash.split('?')[1] : hash.substring(6);
+  const params = {};
+  queryStr.split('&').forEach(part => {
+    const [k, v] = part.split('=');
+    if (k && v) params[k.trim()] = decodeURIComponent(v.trim());
+  });
+
+  if (params.id && params.key) return params;
+  return null;
+}
+
+function checkVaultHashRoute() {
+  const vaultParams = parseVaultHashParams();
+  if (vaultParams) {
+    openModal('modal-vault');
+    switchVaultTab('decrypt');
+    document.getElementById('vault-inp-id').value = vaultParams.id;
+    document.getElementById('vault-inp-key').value = vaultParams.key;
+    decryptVaultPayload(vaultParams.id, vaultParams.key);
+  }
+}
+
+// Attach hashchange listener and check on load
+window.addEventListener('hashchange', checkVaultHashRoute);
+window.addEventListener('DOMContentLoaded', checkVaultHashRoute);
 </script>
 
 </body>
