@@ -21,8 +21,10 @@ from rich.text import Text
 from crackerjack import __version__
 from crackerjack.models import (
     BenchmarkResult,
+    GeneratedPassphrase,
     HashAuditResult,
     PasswordHealthReport,
+    ScanFinding,
 )
 
 console = Console()
@@ -242,3 +244,80 @@ def render_benchmark(res: BenchmarkResult) -> None:
             box=box.ROUNDED,
         )
     )
+
+
+def render_passphrase(res: GeneratedPassphrase) -> None:
+    """Render the generated NIST-compliant passphrase with entropy metrics."""
+    badge_style, border_style = get_grade_style(res.nist_grade)
+
+    content = Text()
+    content.append("Generated Passphrase:\n", style="dim")
+    content.append(f"{res.passphrase}\n\n", style="bold green text_invert")
+    content.append(f"• Word Count: ", style="dim")
+    content.append(f"{res.word_count} words\n", style="bold white")
+    content.append(f"• Theoretical Entropy: ", style="dim")
+    content.append(f"{res.entropy_bits:.1f} bits\n", style="bold cyan")
+    content.append(f"• Effective Shannon Entropy: ", style="dim")
+    content.append(f"{res.effective_entropy_bits:.1f} bits\n", style="bold cyan")
+    content.append(f"• NIST SP 800-63B Grade: ", style="dim")
+    content.append(f" {res.nist_grade} ({res.nist_score}/100) \n", style=badge_style)
+
+    if res.breached:
+        content.append(f"• Breach Status: ", style="dim")
+        content.append(f"CRITICAL: Found in {res.breach_count:,} public breaches!\n", style="bold red")
+    else:
+        content.append(f"• Breach Status: ", style="dim")
+        content.append("Zero occurrences in known breach databases.\n", style="bold green")
+
+    panel = Panel(
+        content,
+        title="[bold cyan]NIST SP 800-63B Certified Passphrase[/bold cyan]",
+        box=box.ROUNDED,
+        border_style="green" if res.nist_grade in ("A+", "A") else "yellow",
+        expand=False,
+    )
+    console.print(panel)
+
+
+def render_scan_results(findings: list[ScanFinding]) -> None:
+    """Render repository secret scan findings."""
+    if not findings:
+        console.print(
+            Panel(
+                "[bold green]✓ Repository Clean:[/bold green] No hardcoded passwords or weak secrets detected.",
+                border_style="green",
+                box=box.ROUNDED,
+            )
+        )
+        return
+
+    table = Table(
+        title=f"DevSecOps Repository Scan Findings ({len(findings)} exposed secrets detected)",
+        box=box.ROUNDED,
+        header_style="bold red",
+    )
+    table.add_column("Location", style="cyan")
+    table.add_column("Variable", style="bold yellow")
+    table.add_column("Masked Secret", style="dim")
+    table.add_column("Score", justify="right")
+    table.add_column("Grade", justify="center", width=8)
+    table.add_column("Breach Status", justify="center")
+
+    for f in findings:
+        badge_style, _ = get_grade_style(f.nist_grade)
+        breach_text = (
+            f"[bold red]PWNED ({f.breach_count:,})[/bold red]"
+            if f.breached
+            else "[green]Clean[/green]"
+        )
+        table.add_row(
+            f"{f.file_path}:{f.line_number}",
+            f.variable_name,
+            f.secret_masked,
+            f"{f.nist_score}/100",
+            Text(f" {f.nist_grade} ", style=badge_style),
+            breach_text,
+        )
+
+    console.print(table)
+

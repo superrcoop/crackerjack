@@ -19,16 +19,24 @@ from crackerjack.engine import (
     hash_password,
     run_benchmark,
 )
+from crackerjack.generator import generate_passphrase
 from crackerjack.models import (
     BreachInfo,
     PasswordHealthReport,
+    TargetCredential,
 )
+from crackerjack.parsers import auto_detect_and_parse
+from crackerjack.reporter import build_compliance_summary, save_html_report
+from crackerjack.scanner import scan_directory, scan_file
+from crackerjack.server import run_server
 from crackerjack.ui import (
     console,
     create_audit_progress,
     render_audit_results,
     render_benchmark,
+    render_passphrase,
     render_password_health,
+    render_scan_results,
     show_banner,
 )
 from crackerjack.wordlist import stream_candidates
@@ -237,33 +245,38 @@ def audit_command(
         Optional[Path],
         typer.Option("--output", "-o", help="Write audit results to JSON file"),
     ] = None,
+    report: Annotated[
+        Optional[Path],
+        typer.Option("--report", "-r", help="Path to generate standalone executive HTML compliance report"),
+    ] = None,
+    format: Annotated[
+        str,
+        typer.Option("--format", "-f", help="Credential dump format (auto, shadow, ntds, csv, hash)"),
+    ] = "auto",
 ) -> None:
     """Audit hashes or passwords using multi-core multiprocessing and streaming wordlists."""
     show_banner()
 
     target_str = str(target)
     target_hashes: list[str] = []
+    cred_map: dict[str, TargetCredential] = {}
 
     if Path(target).is_file():
-        raw_lines = _load_lines_from_path(Path(target))
-        for line in raw_lines:
-            algo = detect_hash_type(line)
-            if algo != "unknown":
-                target_hashes.append(line)
-            else:
-                parts = line.split(":")
-                for p in parts:
-                    p_algo = detect_hash_type(p.strip())
-                    if p_algo != "unknown":
-                        target_hashes.append(p.strip())
-                        break
+        parsed_creds = auto_detect_and_parse(Path(target), format_hint=format)
+        for c in parsed_creds:
+            if c.hash_type in ("bcrypt", "argon2", "pbkdf2"):
+                target_hashes.append(c.hash_val)
+                cred_map[c.hash_val] = c
+
         if not target_hashes:
+            raw_lines = _load_lines_from_path(Path(target))
             console.print(f"[yellow]No supported hashes detected in {target}. Auditing as plaintext passwords...[/yellow]")
             context_terms = _parse_context_terms(context)
-            _audit_plaintext_file(raw_lines, output, context_terms=context_terms)
+            _audit_plaintext_file(raw_lines, output, report_path=report, context_terms=context_terms)
             return
     elif detect_hash_type(target_str) != "unknown":
         target_hashes.append(target_str)
+        cred_map[target_str] = TargetCredential(identity="cli_target", hash_val=target_str, hash_type=detect_hash_type(target_str))
     else:
         console.print(
             f"[red]Error: Target '{target_str}' is neither an existing file nor a supported hash "
@@ -327,6 +340,48 @@ def audit_command(
             json.dump(output_data, f, indent=2)
         console.print(f"[green]Audit report saved to {output}[/green]")
 
+    if report:
+        findings: list[dict] = []
+        for r in results:
+            cred = cred_map.get(r.target_hash)
+            ident = cred.identity if cred else "hash"
+            c_terms = cred.context_terms if cred else _parse_context_terms(context)
+
+            if r.cracked and r.plaintext:
+                nist = evaluate_password(r.plaintext, context_terms=c_terms)
+                violations = list(nist.matched_context_terms) if nist.has_context_words else []
+                if not nist.passed_min_length:
+                    violations.append("Length < 8 chars")
+                if nist.is_dictionary_word:
+                    violations.append("Dictionary word root")
+                findings.append({
+                    "identity": ident,
+                    "masked": r.plaintext[0] + "*" * max(1, len(r.plaintext) - 2) + r.plaintext[-1] if len(r.plaintext) > 2 else "***",
+                    "algorithm": r.hash_type,
+                    "verdict": "CRACKED (COMPROMISED)",
+                    "score": nist.score,
+                    "grade": nist.grade,
+                    "violations": violations,
+                    "cracked": True,
+                    "breached": False,
+                })
+            else:
+                findings.append({
+                    "identity": ident,
+                    "masked": r.target_hash[:16] + "...",
+                    "algorithm": r.hash_type,
+                    "verdict": "SECURE (UNCRACKED)",
+                    "score": 90,
+                    "grade": "A",
+                    "violations": [],
+                    "cracked": False,
+                    "breached": False,
+                })
+
+        summary = build_compliance_summary(findings)
+        save_html_report(summary, report, title="Executive Credential Audit & Compliance Report")
+        console.print(f"[bold green]Executive HTML compliance report saved to {report}[/bold green]")
+
     any_cracked = any(r.cracked for r in results)
     if any_cracked:
         console.print("[bold red]Audit completed: Compromised hashes identified in wordlist![/bold red]")
@@ -338,15 +393,19 @@ def audit_command(
 def _audit_plaintext_file(
     passwords: list[str],
     output_path: Optional[Path],
+    report_path: Optional[Path] = None,
     context_terms: list[str] | None = None,
 ) -> None:
     """Batch evaluate plaintext passwords against NIST SP 800-63B and HIBP."""
     reports: list[dict] = []
-    for pw in passwords:
+    findings: list[dict] = []
+
+    for idx, pw in enumerate(passwords, 1):
         nist = evaluate_password(pw, context_terms=context_terms)
         breach = check_password_breached(pw)
+        masked = pw[0] + "*" * max(1, len(pw) - 2) + pw[-1] if len(pw) > 2 else "***"
         report = PasswordHealthReport(
-            password_masked=pw[0] + "*" * max(1, len(pw) - 2) + pw[-1] if len(pw) > 2 else "***",
+            password_masked=masked,
             nist=nist,
             breach=breach,
             verdict=f"Grade {nist.grade} (Score: {nist.score}/100)",
@@ -355,10 +414,33 @@ def _audit_plaintext_file(
         reports.append(report.to_dict())
         render_password_health(report)
 
+        violations = list(nist.matched_context_terms) if nist.has_context_words else []
+        if not nist.passed_min_length:
+            violations.append("Length < 8 chars")
+        if breach.pwned:
+            violations.append(f"Breached in {breach.breach_count:,} dumps")
+
+        findings.append({
+            "identity": f"password_{idx}",
+            "masked": masked,
+            "algorithm": "PLAINTEXT",
+            "verdict": "BREACHED" if breach.pwned else f"Grade {nist.grade}",
+            "score": nist.score,
+            "grade": nist.grade,
+            "violations": violations,
+            "cracked": False,
+            "breached": breach.pwned,
+        })
+
     if output_path:
         with output_path.open("w", encoding="utf-8") as f:
             json.dump(reports, f, indent=2)
         console.print(f"[green]Health audit saved to {output_path}[/green]")
+
+    if report_path:
+        summary = build_compliance_summary(findings)
+        save_html_report(summary, report_path, title="Plaintext Password Governance Report")
+        console.print(f"[bold green]Executive HTML compliance report saved to {report_path}[/bold green]")
 
 
 @app.command(name="benchmark")
@@ -400,3 +482,122 @@ def version_command() -> None:
     console.print(f"Crackerjack Version: [bold cyan]{__version__}[/bold cyan]")
     console.print(f"Python Runtime: [white]{sys.version.split()[0]}[/white]")
     console.print(f"Available CPU Cores: [bold green]{os.cpu_count() or 1}[/bold green]")
+
+
+@app.command(name="generate")
+def generate_command(
+    words: Annotated[
+        int,
+        typer.Option("--words", "-w", help="Number of distinct words in passphrase (3 to 12)"),
+    ] = 4,
+    separator: Annotated[
+        str,
+        typer.Option("--separator", "-s", help="Separator delimiter between words"),
+    ] = "-",
+    capitalize: Annotated[
+        bool,
+        typer.Option("--capitalize", "-c", help="Capitalize each word in passphrase"),
+    ] = False,
+    number: Annotated[
+        bool,
+        typer.Option("--number/--no-number", "-n", help="Append random 3-digit number"),
+    ] = True,
+    symbol: Annotated[
+        bool,
+        typer.Option("--symbol/--no-symbol", help="Append random symbol"),
+    ] = False,
+    check_breach: Annotated[
+        bool,
+        typer.Option("--check-breach/--no-breach", help="Verify generated passphrase against HaveIBeenPwned"),
+    ] = True,
+    json_output: Annotated[
+        bool,
+        typer.Option("--json", "-j", help="Output result in JSON format"),
+    ] = False,
+) -> None:
+    """Generate a cryptographically secure, NIST SP 800-63B compliant multi-word passphrase."""
+    res = generate_passphrase(
+        word_count=words,
+        separator=separator,
+        capitalize=capitalize,
+        add_number=number,
+        add_symbol=symbol,
+        check_breach=check_breach,
+    )
+
+    if json_output:
+        console.print(json.dumps(res.to_dict(), indent=2))
+    else:
+        render_passphrase(res)
+
+
+@app.command(name="serve")
+def serve_command(
+    host: Annotated[
+        str,
+        typer.Option("--host", "-h", help="Host address to bind the API server"),
+    ] = "0.0.0.0",
+    port: Annotated[
+        int,
+        typer.Option("--port", "-p", help="Port to listen on"),
+    ] = 8000,
+) -> None:
+    """Start the Crackerjack REST API microservice for real-time validation and scoring."""
+    show_banner()
+    run_server(host=host, port=port)
+
+
+@app.command(name="scan")
+def scan_command(
+    target: Annotated[
+        Path,
+        typer.Argument(help="File or directory path to scan for hardcoded secrets"),
+    ] = Path("."),
+    fail_under: Annotated[
+        int,
+        typer.Option("--fail-under", help="Exit code 1 if any secret has a NIST score below this"),
+    ] = 70,
+    fail_on_breached: Annotated[
+        bool,
+        typer.Option("--fail-on-breached/--ignore-breached", help="Exit code 1 if any secret is in a breach"),
+    ] = True,
+    check_breach: Annotated[
+        bool,
+        typer.Option("--check-breach/--no-breach", help="Check detected secrets against HaveIBeenPwned API"),
+    ] = False,
+    json_output: Annotated[
+        bool,
+        typer.Option("--json", "-j", help="Output scan findings in JSON format"),
+    ] = False,
+) -> None:
+    """Scan files or repository trees for exposed, weak, or breached credentials in code and configs."""
+    target_path = Path(target)
+    if not target_path.exists():
+        console.print(f"[red]Error: Target path does not exist: {target_path}[/red]")
+        raise typer.Exit(code=1)
+
+    if target_path.is_file():
+        findings = scan_file(target_path, check_breach=check_breach)
+    else:
+        findings = scan_directory(target_path, check_breach=check_breach)
+
+    if json_output:
+        console.print(json.dumps([f.to_dict() for f in findings], indent=2))
+    else:
+        render_scan_results(findings)
+
+    # Check failure conditions
+    has_low_score = any(f.nist_score < fail_under for f in findings)
+    has_breached = any(f.breached for f in findings)
+
+    if has_breached and fail_on_breached:
+        console.print(f"[bold red]CI Gate Failure: Known breached credentials detected in {target_path}![/bold red]")
+        raise typer.Exit(code=1)
+    elif has_low_score:
+        console.print(f"[bold red]CI Gate Failure: Credentials scoring below threshold ({fail_under}/100) detected![/bold red]")
+        raise typer.Exit(code=1)
+    elif findings:
+        console.print(f"[yellow]Scan completed: {len(findings)} secrets detected (passed thresholds).[/yellow]")
+    else:
+        console.print("[green]Scan completed: No secrets detected.[/green]")
+

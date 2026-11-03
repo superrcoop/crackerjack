@@ -155,3 +155,107 @@ class BenchmarkResult:
             "multi_core_rate": round(self.multi_core_rate, 2),
             "speedup": round(self.speedup, 2),
         }
+
+
+@dataclass(slots=True)
+class TargetCredential:
+    """A credential entry ingested from shadow files, NTDS, or CSV."""
+    identity: str
+    hash_val: str
+    hash_type: str = "unknown"
+    context_terms: list[str] = field(default_factory=list)
+    cracked: bool = False
+    plaintext: str | None = None
+
+    def to_dict(self) -> dict[str, Any]:
+        return {
+            "identity": self.identity,
+            "hash_val": self.hash_val,
+            "hash_type": self.hash_type,
+            "context_terms": self.context_terms,
+            "cracked": self.cracked,
+            "plaintext": self.plaintext,
+        }
+
+
+@dataclass(slots=True)
+class GeneratedPassphrase:
+    """NIST SP 800-63B compliant generated passphrase with certified entropy."""
+    passphrase: str
+    word_count: int
+    separator: str
+    entropy_bits: float
+    effective_entropy_bits: float
+    nist_score: int
+    nist_grade: str
+    breached: bool = False
+    breach_count: int = 0
+
+    def to_dict(self) -> dict[str, Any]:
+        return {
+            "passphrase": self.passphrase,
+            "word_count": self.word_count,
+            "separator": self.separator,
+            "entropy_bits": round(self.entropy_bits, 2),
+            "effective_entropy_bits": round(self.effective_entropy_bits, 2),
+            "nist_score": self.nist_score,
+            "nist_grade": self.nist_grade,
+            "breached": self.breached,
+            "breach_count": self.breach_count,
+        }
+
+
+@dataclass(slots=True)
+class ComplianceSummary:
+    """Enterprise compliance and security health aggregation."""
+    total_evaluated: int
+    total_cracked_or_weak: int
+    total_breached: int
+    avg_entropy: float
+    overall_score: int
+    overall_grade: str
+    nist_compliant_pct: float
+    pci_dss_compliant: bool
+    grade_distribution: dict[str, int] = field(default_factory=dict)
+    findings: list[dict[str, Any]] = field(default_factory=list)
+
+    def to_dict(self) -> dict[str, Any]:
+        return {
+            "total_evaluated": self.total_evaluated,
+            "total_cracked_or_weak": self.total_cracked_or_weak,
+            "total_breached": self.total_breached,
+            "avg_entropy": round(self.avg_entropy, 2),
+            "overall_score": self.overall_score,
+            "overall_grade": self.overall_grade,
+            "nist_compliant_pct": round(self.nist_compliant_pct, 1),
+            "pci_dss_compliant": self.pci_dss_compliant,
+            "grade_distribution": self.grade_distribution,
+            "findings": self.findings,
+        }
+
+
+@dataclass(slots=True)
+class ScanFinding:
+    """Result of scanning a repository file for exposed credentials."""
+    file_path: str
+    line_number: int
+    variable_name: str
+    secret_masked: str
+    raw_secret: str
+    nist_score: int
+    nist_grade: str
+    breached: bool = False
+    breach_count: int = 0
+
+    def to_dict(self) -> dict[str, Any]:
+        return {
+            "file_path": self.file_path,
+            "line_number": self.line_number,
+            "variable_name": self.variable_name,
+            "secret_masked": self.secret_masked,
+            "nist_score": self.nist_score,
+            "nist_grade": self.nist_grade,
+            "breached": self.breached,
+            "breach_count": self.breach_count,
+        }
+

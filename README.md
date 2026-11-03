@@ -1,6 +1,6 @@
-# Crackerjack 3.1
+# Crackerjack 3.2
 
-> **Modern Multi-Core Password Health Auditor, Multi-Algorithm KDF Engine & NIST SP 800-63B Compliance Checker**
+> **Enterprise Password Health Auditor, NIST SP 800-63B Compliance Engine & DevSecOps Platform**
 
 [![Python 3.11+](https://img.shields.io/badge/python-3.11+-blue.svg)](https://www.python.org/downloads/)
 [![License: GPL v3](https://img.shields.io/badge/License-GPLv3-blue.svg)](https://www.gnu.org/licenses/gpl-3.0)
@@ -13,10 +13,10 @@
  / /   / ___/ __ `/ ___/ //_/ _ \/ ___// / __ `/ ___/ //_/
 / /___/ /  / /_/ / /__/ ,< /  __/ /   / / /_/ / /__/ ,<
 \____/_/   \__,_/\___/_/|_|\___/_/ __/ /\__,_/\___/_/|_|
-                                  /___/      [v3.1.0]
+                                  /___/      [v3.2.0]
 ```
 
-**Crackerjack 3.1** transforms Crackerjack into an enterprise-grade **Password Health & Breach Auditor** designed for security teams, sysadmins, and developers. Built from the ground up for modern Python 3.11+, it pairs high-performance **multi-core multiprocessing** with defense-in-depth security standards like **NIST SP 800-63B**, multi-algorithm KDF support (**Argon2id**, **PBKDF2-HMAC-SHA256**, **Bcrypt**), zero-RAM compressed wordlist streaming, and the **HaveIBeenPwned** k-anonymity breach API.
+**Crackerjack 3.2** is an enterprise-grade **Password Health Governance, Compliance & DevSecOps Platform** designed for security teams, sysadmins, consultants, and developers. Built from the ground up for modern Python 3.11+, it pairs high-performance **multi-core multiprocessing** with defense-in-depth standards (**NIST SP 800-63B**, **PCI-DSS v4.0**), multi-algorithm KDF support (**Argon2id**, **PBKDF2-HMAC-SHA256**, **Bcrypt**), zero-RAM compressed wordlist streaming, executive HTML reporting, a zero-dependency REST API microservice, and repository secret scanning.
 
 ---
 
@@ -36,6 +36,7 @@
   - **Argon2** (`$argon2id$`, `$argon2i$`, `$argon2d$`)
   - **PBKDF2-HMAC-SHA256** (`$pbkdf2-sha256$`, `pbkdf2_sha256$`)
   - **Bcrypt** (`$2a$`, `$2b$`, `$2y$`)
+- 📊 **Executive HTML Compliance Reports**: Generates standalone single-file audit reports (`--report audit.html`) featuring SVG charts, fleet health scoring, PCI-DSS v4.0 & NIST compliance cards, findings tables, and print-ready CSS for 1-click executive PDF generation.
 - 🚀 **Zero-RAM Compressed Wordlist Streaming**: Stream candidate passwords lazily with an $O(1)$ memory footprint. Native, transparent decompression for:
   - Plain text (`.txt`, `.dic`, `.words`)
   - Gzip (`.gz`, e.g. `rockyou.txt.gz`)
@@ -47,10 +48,11 @@
   - Evaluates raw and effective Shannon information entropy.
   - Detects keyboard walks (`qwerty`, `12345`), repetition (`aaaa`), and common dictionary roots (including leetspeak).
   - Computes objective letter grades (**A+**, **A**, **B**, **C**, **D**, **F**) with actionable remediation tips.
-- 🌐 **HaveIBeenPwned k-Anonymity Breach Detection**: Checks passwords against billions of compromised credentials via the Pwned Passwords API. Passwords are never sent over the network; only a 5-character SHA-1 prefix is transmitted, preserving complete privacy.
+- 🔑 **NIST Multi-Word Passphrase Generator**: Generate cryptographically secure, memorable passphrases using CSPRNG selection (`secrets.choice`) with certified entropy calculation and optional breach pre-checking (`crackerjack generate`).
+- 🌐 **Zero-Dependency REST API Microservice**: Start a high-performance local validation and scoring server with `crackerjack serve`. Features `/v1/validate`, `/v1/evaluate`, `/v1/generate`, `/openapi.json`, and interactive Swagger UI docs.
+- 🔍 **DevSecOps Repository & Config Scanner**: Scan codebases, `.env` files, and YAML/JSON configurations for hardcoded secrets and enforce CI/CD quality gates (`crackerjack scan`).
+- 📁 **Structured Credential Dump Ingestion**: Automatic parsing and context extraction from Linux `/etc/shadow`, Windows Active Directory NTDS.dit (`username:RID:LM:NTLM`), and CSV user lists.
 - 🎨 **Modern Rich Terminal UI**: Colored terminal interface with styled tables, health badges, progress bars, live hash rates ($H/s$), and elapsed timers powered by `typer` and `rich`.
-- 🔄 **Hybrid Mutation Engine**: Generator-based mutation pipeline including leetspeak replacements, date/year additions, case modifications, and word reversals.
-- 📦 **Standard PEP 517/621 Packaging**: Packaged as `crackerjack-audit` with `pyproject.toml` for simple `pip` installation and CLI access.
 
 ---
 
@@ -94,30 +96,89 @@ crackerjack check "MySecretPassword123" --no-hibp
 crackerjack check "Admin2024!" --json
 ```
 
-*Exit Codes:* Returns `0` if compliant and unbreached; returns `1` if compromised or failing NIST baseline standards.
-
 ---
 
 ### 2. Multi-Core Hash & Credential Auditing (`audit`)
-Audit lists of hashes (Bcrypt, Argon2, PBKDF2) or passwords against plain or compressed wordlists utilizing all CPU cores:
+Audit lists of hashes, `/etc/shadow` dumps, or Active Directory NTDS extracts with streaming wordlists and generate executive HTML compliance reports:
 
 ```bash
-# Audit hashes using 8 worker processes and a gzip-compressed wordlist
+# Standard hash audit with 8 CPU workers
 crackerjack audit hashes.txt --wordlist rockyou.txt.gz --workers 8
 
-# Audit a single hash (auto-detects Bcrypt, Argon2id, PBKDF2)
-crackerjack audit '$argon2id$v=19$...' --wordlist data/samplewords.txt
+# Generate an Executive HTML Compliance Report
+crackerjack audit hashes.txt --wordlist rockyou.txt.gz --report executive-audit.html
 
-# Disable rule mutations for faster exact-match auditing
-crackerjack audit hashes.txt --wordlist rockyou.txt --no-rules
+# Audit Linux /etc/shadow file with automatic per-account context extraction
+crackerjack audit /etc/shadow --format shadow --wordlist rockyou.txt.gz --report shadow-audit.html
 
-# Export audit findings to JSON
-crackerjack audit hashes.txt --wordlist rockyou.txt --output results.json
+# Audit CSV user export
+crackerjack audit users.csv --format csv --wordlist rockyou.txt.gz
 ```
 
 ---
 
-### 3. Generate Secure Hashes (`hash`)
+### 3. Generate NIST-Compliant Passphrases (`generate`)
+Generate memorable, cryptographically strong multi-word passphrases with certified entropy:
+
+```bash
+# Default 4-word passphrase with number and breach pre-check
+crackerjack generate
+
+# 5 words separated by underscores, capitalized, with custom symbol
+crackerjack generate --words 5 --separator "_" --capitalize --symbol
+
+# JSON output for automated provisioning scripts
+crackerjack generate --words 4 --json
+```
+
+---
+
+### 4. REST API Microservice (`serve`)
+Launch a local, zero-dependency REST API for real-time signup validation and IAM webhook integration:
+
+```bash
+# Start API server on port 8000
+crackerjack serve --host 0.0.0.0 --port 8000
+```
+
+*Endpoints:*
+- `GET /docs`: Interactive Swagger UI documentation
+- `GET /v1/health`: System health status
+- `POST /v1/validate`: Fast boolean validation for user registration/password reset forms
+- `POST /v1/evaluate`: Detailed NIST SP 800-63B audit and entropy analysis
+- `POST /v1/generate`: Passphrase generation with certified entropy
+- `GET /openapi.json`: OpenAPI 3.0 schema
+
+---
+
+### 5. DevSecOps Repository Secret Scanner (`scan`)
+Scan repositories, `.env` files, and configuration files for exposed or weak credentials before deployment:
+
+```bash
+# Scan current repository
+crackerjack scan .
+
+# Enforce strict CI/CD gate (fail if score < 75 or if any credential is in a breach)
+crackerjack scan . --fail-under 75 --fail-on-breached
+
+# Output findings in JSON
+crackerjack scan . --json
+```
+
+#### Pre-Commit Hook Integration
+Add Crackerjack to your `.pre-commit-config.yaml`:
+
+```yaml
+repos:
+  - repo: https://github.com/superrcoop/crackerjack
+    rev: v3.2.0
+    hooks:
+      - id: crackerjack-scan
+```
+
+---
+
+### 6. Generate Secure Hashes (`hash`)
 Generate cryptographically strong hashes with custom algorithms and cost factors:
 
 ```bash
@@ -133,20 +194,18 @@ crackerjack hash "mySuperSecretPassphrase" --algo pbkdf2-sha256 --cost 100000
 
 ---
 
-### 4. Benchmark Multi-Core CPU Performance (`benchmark`)
+### 7. Benchmark Multi-Core CPU Performance (`benchmark`)
 Compare single-core baseline vs multi-core throughput on your machine across algorithms:
 
 ```bash
-# Benchmark Bcrypt
 crackerjack benchmark --algo bcrypt --cost 10 --rounds 16
-
-# Benchmark PBKDF2
+crackerjack benchmark --algo argon2id --cost 2 --rounds 8
 crackerjack benchmark --algo pbkdf2-sha256 --cost 50000 --rounds 16
 ```
 
 ---
 
-### 5. Check Environment & Version (`version`)
+### 8. Check Environment & Version (`version`)
 ```bash
 crackerjack version
 ```
@@ -157,44 +216,39 @@ crackerjack version
 
 ```
 crackerjack/
+├── .pre-commit-hooks.yaml      # Git pre-commit hook definition
 ├── pyproject.toml              # Modern PEP 517 build configuration
 ├── requirements.txt            # Pinned dependencies
 ├── src/
 │   └── crackerjack/
-│       ├── __init__.py         # Package version (v3.1.0)
+│       ├── __init__.py         # Package version (v3.2.0)
 │       ├── __main__.py         # python -m crackerjack entry point
-│       ├── cli.py              # Typer command definitions
+│       ├── cli.py              # Typer command definitions (check, audit, generate, serve, scan)
 │       ├── auditor.py          # NIST SP 800-63B policy grader, context checks & entropy
+│       ├── generator.py        # NIST multi-word passphrase generator (CSPRNG)
+│       ├── reporter.py         # Executive HTML compliance reporter with SVG charts
+│       ├── server.py           # Zero-dependency REST API microservice (ThreadingHTTPServer)
+│       ├── scanner.py          # DevSecOps repository & config secret scanner
+│       ├── parsers.py          # Structured credential dump parsers (shadow, NTDS, CSV)
 │       ├── breach.py           # HaveIBeenPwned k-anonymity client
 │       ├── engine.py           # Multi-core multiprocessing engine (Argon2, PBKDF2, Bcrypt)
 │       ├── wordlist.py         # Zero-RAM streaming loader (.txt, .gz, .bz2, .xz)
 │       ├── rules.py            # Password mutation rules & generators
-│       ├── ui.py               # Rich terminal visual components & tables
+│       ├── ui.py               # Rich terminal visual components, tables & panels
 │       └── models.py           # Strongly-typed dataclasses
-├── tests/                      # Pytest automated test suite
+├── tests/                      # Automated test suite
 │   ├── test_auditor.py
 │   ├── test_breach.py
 │   ├── test_cli.py
 │   ├── test_engine.py
+│   ├── test_generator.py
+│   ├── test_parsers.py
+│   ├── test_reporter.py
 │   ├── test_rules.py
+│   ├── test_scanner.py
+│   ├── test_server.py
 │   └── test_wordlist.py
 └── data/                       # Wordlists & sample dictionaries
-```
-
----
-
-## Development & Testing
-
-Run tests with `pytest`:
-
-```bash
-pytest -v
-```
-
-Build distribution packages (`sdist` and `wheel`):
-
-```bash
-python -m build
 ```
 
 ---

@@ -101,3 +101,50 @@ def test_cli_audit_command_gzip_wordlist(tmp_path: Path):
     assert result.exit_code == 1
     assert "CRACKED" in result.output
     assert output_json.exists()
+
+
+def test_cli_generate_command():
+    result = runner.invoke(app, ["generate", "--words", "4", "--separator", "-", "--no-breach"])
+    assert result.exit_code == 0
+    assert "Certified Passphrase" in result.output
+    assert "Theoretical Entropy" in result.output
+
+
+def test_cli_scan_command_clean(tmp_path: Path):
+    clean_file = tmp_path / "main.py"
+    clean_file.write_text("print('hello world')\n", encoding="utf-8")
+
+    result = runner.invoke(app, ["scan", str(tmp_path)])
+    assert result.exit_code == 0
+    assert "No hardcoded passwords or weak secrets detected" in result.output
+
+
+def test_cli_audit_with_html_report(tmp_path: Path):
+    pw = "mysecret123"
+    hashed = bcrypt.hashpw(pw.encode("utf-8"), bcrypt.gensalt(rounds=4)).decode("ascii")
+
+    hash_file = tmp_path / "hashes.txt"
+    hash_file.write_text(f"sysadmin:{hashed}\n")
+
+    dict_file = tmp_path / "dict.txt"
+    dict_file.write_text("mysecret123\n")
+
+    report_html = tmp_path / "report.html"
+
+    result = runner.invoke(
+        app,
+        [
+            "audit",
+            str(hash_file),
+            "--wordlist",
+            str(dict_file),
+            "--workers",
+            "1",
+            "--no-rules",
+            "--report",
+            str(report_html),
+        ],
+    )
+    assert report_html.exists()
+    assert "<!DOCTYPE html>" in report_html.read_text(encoding="utf-8")
+

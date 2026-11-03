@@ -4,8 +4,8 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "crackerjack-audit"
-version = "3.1.0"
-description = "Crackerjack 3.0: Modern Multi-Core Password Health Auditor & NIST SP 800-63B Compliance Checker"
+version = "3.2.0"
+description = "Crackerjack 3.2: Enterprise Password Health Auditor, NIST SP 800-63B Compliance Engine & DevSecOps Platform"
 readme = "README.md"
 authors = [
     { name = "Crackerjack Community" }

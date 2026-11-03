@@ -16,9 +16,11 @@ import time
 from concurrent.futures import ProcessPoolExecutor, as_completed
 from typing import Callable, Iterable, Iterator, Sequence
 
-import bcrypt
-
-from crackerjack.models import BenchmarkResult, HashAuditResult
+try:
+    import bcrypt
+    HAS_BCRYPT = True
+except ImportError:
+    HAS_BCRYPT = False
 
 try:
     import argon2
@@ -71,6 +73,8 @@ def hash_password(
     """
     algo = algorithm.lower().strip()
     if algo == "bcrypt":
+        if not HAS_BCRYPT:
+            raise RuntimeError("The 'bcrypt' package is required for Bcrypt support. Install it with: pip install bcrypt")
         rounds = cost if cost is not None else 12
         salt = bcrypt.gensalt(rounds=rounds)
         return bcrypt.hashpw(password.encode("utf-8"), salt).decode("ascii")
@@ -104,6 +108,8 @@ def hash_password(
 
 def verify_bcrypt_single(candidate: str, hash_bytes: bytes) -> bool:
     """Safely check candidate against a bcrypt hash."""
+    if not HAS_BCRYPT:
+        return False
     try:
         cand_bytes = candidate.encode("utf-8")
         if len(cand_bytes) > 72:

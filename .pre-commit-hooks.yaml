@@ -1,0 +1,7 @@
+- id: crackerjack-scan
+  name: Crackerjack Password & Secret Scanner
+  description: Scans repository files for weak, hardcoded, or breached credentials using NIST SP 800-63B standards.
+  entry: crackerjack scan
+  language: python
+  types: [text]
+  stages: [pre-commit, pre-push]
