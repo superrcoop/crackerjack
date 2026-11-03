@@ -1,0 +1,5 @@
+name = "crackerjack-security"
+compatibility_date = "2024-01-01"
+
+# Cloudflare Pages configuration
+pages_build_output_dir = "web"

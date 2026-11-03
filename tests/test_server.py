@@ -1,7 +1,9 @@
 """Tests for REST API microservice and OpenAPI specification."""
 
+from io import BytesIO
 import json
 import threading
+from typing import Any
 import urllib.request
 from http import HTTPStatus
 
@@ -26,9 +28,25 @@ def test_docs_html():
 
 class InMemoryHandler(CrackerjackRequestHandler):
     """In-memory test harness capturing responses without opening TCP sockets."""
-    def __init__(self):
+    def __init__(self, path: str = ""):
+        self.path = path
+        self.headers = {}
         self.last_status = None
         self.last_data = None
+        self.response_headers = {}
+        self.wfile = BytesIO()
+
+    def send_response(self, status: int) -> None:
+        self.last_status = status
+
+    def send_header(self, key: str, value: str) -> None:
+        self.response_headers[key] = value
+
+    def end_headers(self) -> None:
+        pass
+
+    def _send_cors_headers(self) -> None:
+        pass
 
     def _send_json_response(self, status: int, data: Any) -> None:
         self.last_status = status
@@ -69,4 +87,24 @@ def test_handler_generate_endpoint():
     assert "passphrase" in handler.last_data
     assert len(handler.last_data["passphrase"].split("_")) == 5
     assert handler.last_data["entropy_bits"] > 50.0
+ 
+ 
+def test_root_serves_landing_page():
+    handler = InMemoryHandler(path="/")
+    handler.do_GET()
+    assert handler.last_status == HTTPStatus.OK
+    assert handler.response_headers.get("Content-Type") == "text/html; charset=utf-8"
+    body = handler.wfile.getvalue().decode("utf-8")
+    assert "Security built into" in body
+    assert "every system layer" in body
+    assert "https://d8j0ntlcm91z4.cloudfront.net" in body
+
+
+def test_docs_route():
+    handler = InMemoryHandler(path="/docs")
+    handler.do_GET()
+    assert handler.last_status == HTTPStatus.OK
+    assert handler.response_headers.get("Content-Type") == "text/html; charset=utf-8"
+    body = handler.wfile.getvalue().decode("utf-8")
+    assert "SwaggerUIBundle" in body
 

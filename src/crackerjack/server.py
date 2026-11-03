@@ -5,6 +5,7 @@ from __future__ import annotations
 import json
 from http import HTTPStatus
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
+from pathlib import Path
 from typing import Any
 
 from crackerjack import __version__
@@ -175,7 +176,23 @@ class CrackerjackRequestHandler(BaseHTTPRequestHandler):
             )
         elif path == "/openapi.json":
             self._send_json_response(HTTPStatus.OK, get_openapi_spec())
-        elif path in ("/docs", "/api/docs", ""):
+        elif path == "":
+            web_file = Path(__file__).resolve().parent.parent.parent / "web" / "index.html"
+            if not web_file.exists():
+                web_file = Path.cwd() / "web" / "index.html"
+
+            if web_file.exists():
+                html = web_file.read_bytes()
+            else:
+                html = get_docs_html().encode("utf-8")
+
+            self.send_response(HTTPStatus.OK)
+            self.send_header("Content-Type", "text/html; charset=utf-8")
+            self.send_header("Content-Length", str(len(html)))
+            self._send_cors_headers()
+            self.end_headers()
+            self.wfile.write(html)
+        elif path in ("/docs", "/api/docs"):
             html = get_docs_html().encode("utf-8")
             self.send_response(HTTPStatus.OK)
             self.send_header("Content-Type", "text/html; charset=utf-8")

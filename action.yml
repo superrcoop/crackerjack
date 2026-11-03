@@ -1,0 +1,61 @@
+name: 'Crackerjack Security & Secret Auditor'
+description: 'Automated DevSecOps secret scanning, credential dump analysis, and NIST SP 800-63B password policy enforcement.'
+author: 'superrcoop'
+branding:
+  icon: 'shield'
+  color: 'red'
+
+inputs:
+  path:
+    description: 'Path or directory to scan for hardcoded secrets, tokens, or credential files'
+    required: false
+    default: '.'
+  fail-on-findings:
+    description: 'Exit with non-zero code if high-entropy secrets or weak credentials are discovered'
+    required: false
+    default: 'true'
+  min-score:
+    description: 'Minimum required NIST SP 800-63B compliance score (0-100)'
+    required: false
+    default: '65'
+  webhook:
+    description: 'Optional webhook URL for Slack, Teams, or SIEM notifications'
+    required: false
+    default: ''
+  webhook-format:
+    description: 'Webhook format: slack, teams, or generic'
+    required: false
+    default: 'slack'
+
+outputs:
+  findings-count:
+    description: 'Total number of secret or credential policy violations discovered'
+    value: ${{ steps.scan.outputs.findings }}
+
+runs:
+  using: 'composite'
+  steps:
+    - name: Set up Python
+      uses: actions/setup-python@v5
+      with:
+        python-version: '3.11'
+
+    - name: Install Crackerjack
+      shell: bash
+      run: |
+        python -m pip install --upgrade pip
+        python -m pip install "${{ github.action_path }}"
+
+    - name: Run Crackerjack Security Scan
+      id: scan
+      shell: bash
+      run: |
+        EXTRA_FLAGS=""
+        if [ "${{ inputs.fail-on-findings }}" = "true" ]; then
+          EXTRA_FLAGS="$EXTRA_FLAGS --fail-on-findings"
+        fi
+        if [ -n "${{ inputs.webhook }}" ]; then
+          EXTRA_FLAGS="$EXTRA_FLAGS --webhook ${{ inputs.webhook }} --webhook-format ${{ inputs.webhook-format }}"
+        fi
+        echo "Running Crackerjack scanner on ${{ inputs.path }}..."
+        crackerjack scan "${{ inputs.path }}" $EXTRA_FLAGS

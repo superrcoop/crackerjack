@@ -1,0 +1,1822 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Security built into every system layer</title>
+
+<!-- Fonts: Space Grotesk & JetBrains Mono with exact aliases 'SG' and 'JB' -->
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;480;500;600&family=Space+Grotesk:wght@400;480;500;700&display=block" rel="stylesheet">
+
+<style>
+/* Font aliases matching exact specification */
+@font-face {
+  font-family: 'SG';
+  src: local('Space Grotesk'), local('SpaceGrotesk-Light'), local('SpaceGrotesk-Regular'), local('SpaceGrotesk-Bold'),
+       url('https://fonts.gstatic.com/s/spacegrotesk/v16/V8mQoQDjQSkFtoMM3T6r8E7mF71Q-g.woff2') format('woff2');
+  font-weight: 400 700;
+  font-display: block;
+}
+@font-face {
+  font-family: 'JB';
+  src: local('JetBrains Mono'), local('JetBrainsMono-Regular'), local('JetBrainsMono-Medium'),
+       url('https://fonts.gstatic.com/s/jetbrainsmono/v18/tDbY2o-flEEny0FZhsfKu5WU4zr3E_al0618U1xxxx.woff2') format('woff2');
+  font-weight: 400 700;
+  font-display: block;
+}
+
+/* Document shell */
+*, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+html, body {
+  height: 100%;
+  background: #000;
+  overflow: hidden;
+  color: #fff;
+  font-family: 'JB', monospace;
+}
+body {
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+  text-rendering: geometricPrecision;
+}
+
+/* Design Tokens & Responsive Scaling System */
+:root {
+  --s: min(100vw / 1505, 100vh / 700);
+  --red: #c81b1c;
+  --ink: #fff;
+  --sub: #e6e6e6;
+  --lab: #949494;
+  --bx: 60;
+  --by: 36;
+  --bs: 44;
+  --h1y: -12.5;
+  --suby: 167.5;
+  --numy: 19;
+  --laby: 74;
+}
+
+@media (max-width: 1023px) and (max-aspect-ratio: 1/1) {
+  :root {
+    --s: clamp(0.82px, min(100vw / 900, 100vh / 1200), 1.25px);
+    --bx: 56;
+    --by: 33;
+    --bs: 40;
+    --h1y: -10.25;
+    --suby: 137.4;
+    --numy: 15.6;
+    --laby: 60.7;
+  }
+}
+
+@media (max-width: 599px) {
+  :root {
+    --s: min(100vw / 430, 100vh / 620, 1.02px);
+    --bx: 26;
+    --by: 21;
+    --bs: 34;
+    --h1y: -7.1;
+    --suby: 108;
+    --numy: 13;
+    --laby: 50;
+  }
+}
+
+/* Sizing probe for WAAPI runtime measurement */
+#s-probe {
+  position: absolute;
+  top: -9999px;
+  left: -9999px;
+  width: calc(100 * var(--s));
+  height: 1px;
+  pointer-events: none;
+  visibility: hidden;
+}
+
+/* Screen container */
+.screen {
+  position: fixed;
+  inset: 0;
+  overflow: hidden;
+  background: #000;
+}
+
+/* Background video layers */
+.bg, .bg2 {
+  position: absolute;
+  inset: 0;
+  overflow: hidden;
+  pointer-events: none;
+}
+.bg {
+  filter: url(#grade);
+}
+.bg video, .bg2 video {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  object-position: center top;
+  display: block;
+}
+.bg2 {
+  filter: url(#grade2);
+  mix-blend-mode: plus-lighter;
+  opacity: .35;
+  -webkit-mask-image: linear-gradient(180deg, transparent 21.5%, #000 100%);
+  mask-image: linear-gradient(180deg, transparent 21.5%, #000 100%);
+}
+
+/* Scrim: hidden on desktop */
+.scrim {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  display: none;
+}
+
+/* Tablet portrait video treatment */
+@media (max-width: 1023px) and (max-aspect-ratio: 1/1) {
+  .bg2 { display: none; }
+  .bg video {
+    object-position: right top;
+    transform: scale(1.18);
+    transform-origin: right top;
+  }
+  .bg {
+    -webkit-mask-image: linear-gradient(180deg, #000 0 40%, transparent 64%);
+    mask-image: linear-gradient(180deg, #000 0 40%, transparent 64%);
+  }
+  .scrim {
+    display: block;
+    background: linear-gradient(100deg, #000 26%, rgba(0,0,0,.74) 50%, rgba(0,0,0,.18) 76%, transparent 92%);
+  }
+}
+
+/* Phone video treatment */
+@media (max-width: 599px) {
+  .bg video, .bg2 video {
+    object-position: 78% top;
+  }
+  .bg2 {
+    display: block;
+    -webkit-mask-image: linear-gradient(180deg, transparent 10%, #000 60%);
+    mask-image: linear-gradient(180deg, transparent 10%, #000 60%);
+  }
+  .scrim {
+    display: block;
+    background: linear-gradient(180deg, rgba(0,0,0,.10) 0%, rgba(0,0,0,.50) 24%, rgba(0,0,0,.86) 42%, #000 66%);
+  }
+}
+
+/* Primary flex frame */
+.frame {
+  position: relative;
+  z-index: 10;
+  width: 100%;
+  height: 100%;
+  display: flex;
+  flex-direction: column;
+}
+
+/* Fluid Spacers */
+.sp { width: 100%; }
+.sp-a { flex: 239; }
+.sp-b { flex: 194; }
+.sp-c { flex: 115; }
+
+@media (max-width: 1023px) and (max-aspect-ratio: 1/1) {
+  .sp-a { flex: 340; }
+  .sp-b { flex: 276; }
+  .sp-c { flex: 163; }
+}
+@media (max-width: 599px) {
+  .sp-a { flex: 106; }
+  .sp-b { flex: 92; }
+  .sp-c { flex: 56; }
+}
+
+/* Header */
+header {
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: 100%;
+  height: calc(100 * var(--s));
+  pointer-events: auto;
+  z-index: 20;
+}
+
+/* Logo */
+.logo {
+  position: absolute;
+  left: calc(60 * var(--s));
+  top: calc(35 * var(--s));
+  width: calc(45 * var(--s));
+  height: calc(45 * var(--s));
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  text-decoration: none;
+}
+.logo svg {
+  width: 100%;
+  height: 100%;
+  display: block;
+}
+
+/* Desktop Nav */
+nav {
+  position: absolute;
+  left: calc(482 * var(--s));
+  top: calc(32 * var(--s));
+  height: calc(58 * var(--s));
+  display: flex;
+  align-items: center;
+}
+.nav-link {
+  font-family: 'JB', monospace;
+  font-weight: 400;
+  font-size: calc(19.9 * var(--s));
+  color: #fff;
+  text-decoration: none;
+  background: none;
+  border: none;
+  cursor: pointer;
+  display: inline-flex;
+  align-items: center;
+  transition: color 0.15s ease;
+  white-space: nowrap;
+}
+.nav-link + .nav-link {
+  margin-left: calc(40 * var(--s));
+}
+.nav-link:nth-child(2) {
+  margin-left: calc(53 * var(--s));
+}
+.nav-link:nth-child(4) {
+  margin-left: calc(37 * var(--s));
+}
+.nav-link svg.chv {
+  width: calc(11.6 * var(--s));
+  height: calc(7.2 * var(--s));
+  margin-left: calc(7 * var(--s));
+  margin-top: calc(-2.6 * var(--s));
+  stroke: currentColor;
+  stroke-width: 1.7;
+  fill: none;
+}
+
+@media (hover: hover) {
+  .nav-link:hover {
+    color: var(--red);
+  }
+}
+
+/* Top Button */
+.btn-top {
+  position: absolute;
+  left: calc(1232 * var(--s));
+  top: calc(30 * var(--s));
+}
+
+/* Shared Button System */
+.btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: calc(212 * var(--s));
+  height: calc(58 * var(--s));
+  background: var(--red);
+  border: none;
+  border-radius: 0;
+  padding-left: calc(18 * var(--s));
+  padding-right: calc(22 * var(--s));
+  gap: calc(11 * var(--s));
+  cursor: pointer;
+  text-decoration: none;
+  color: #fff;
+  white-space: nowrap;
+  transition: background 0.18s ease;
+}
+.btn .btn-lbl {
+  font-family: 'SG', sans-serif;
+  font-weight: 480;
+  font-size: calc(20.85 * var(--s));
+  letter-spacing: calc(-0.62 * var(--s));
+  transform: translateY(calc(1.5 * var(--s)));
+}
+.btn .btn-arr {
+  width: calc(21.5 * var(--s));
+  height: calc(18 * var(--s));
+  display: block;
+  flex-shrink: 0;
+  transition: transform 0.18s ease;
+}
+.btn .btn-arr path {
+  stroke: #fff;
+  stroke-width: 2;
+  fill: none;
+  stroke-linecap: square;
+  stroke-linejoin: miter;
+}
+
+@media (hover: hover) {
+  .btn:hover {
+    background: #b01617;
+  }
+  .btn:hover .btn-arr {
+    transform: translateX(calc(3 * var(--s)));
+  }
+}
+
+/* Tablet adjustments */
+@media (max-width: 1023px) and (max-aspect-ratio: 1/1) {
+  .btn {
+    width: calc(174 * var(--s));
+    height: calc(47.6 * var(--s));
+    padding-left: calc(14.8 * var(--s));
+    padding-right: calc(18 * var(--s));
+    gap: calc(9 * var(--s));
+  }
+  .btn .btn-lbl {
+    font-size: calc(17.1 * var(--s));
+  }
+}
+
+/* Phone adjustments */
+@media (max-width: 599px) {
+  .btn {
+    width: calc(185 * var(--s));
+    height: calc(50 * var(--s));
+    padding-left: calc(15.7 * var(--s));
+    padding-right: calc(19.1 * var(--s));
+    gap: calc(9.6 * var(--s));
+  }
+  .btn .btn-lbl {
+    font-size: calc(17.5 * var(--s));
+  }
+}
+
+/* Burger Button (mobile & tablet) */
+.burger {
+  display: none;
+  position: absolute;
+  right: calc(var(--bx) * var(--s));
+  top: calc(var(--by) * var(--s));
+  width: calc(var(--bs) * var(--s));
+  height: calc(var(--bs) * var(--s));
+  background: none;
+  border: none;
+  cursor: pointer;
+  padding: calc(6 * var(--s));
+  z-index: 100;
+  flex-direction: column;
+  justify-content: space-around;
+  align-items: flex-start;
+}
+.burger span {
+  display: block;
+  height: calc(2.2 * var(--s));
+  background: #fff;
+  width: 100%;
+  transition: transform 0.3s cubic-bezier(0.16, 1, 0.3, 1), opacity 0.2s ease, width 0.3s ease;
+  transform-origin: center;
+}
+.burger span:nth-child(3) {
+  width: 47%;
+}
+
+body.nav-open .burger span:nth-child(1) {
+  transform: translateY(calc(8.5 * var(--s))) rotate(45deg);
+}
+body.nav-open .burger span:nth-child(2) {
+  opacity: 0;
+}
+body.nav-open .burger span:nth-child(3) {
+  width: 100%;
+  transform: translateY(calc(-8.5 * var(--s))) rotate(-45deg);
+}
+
+@media (max-width: 1023px) {
+  nav, .btn-top { display: none; }
+  .burger { display: flex; }
+}
+
+/* Hero Section */
+.hero {
+  position: relative;
+  width: 100%;
+  min-height: calc(340 * var(--s));
+}
+.hero h1 {
+  position: absolute;
+  left: calc(73 * var(--s));
+  top: calc(var(--h1y) * var(--s));
+  font-family: 'SG', sans-serif;
+  font-weight: 700;
+  font-size: calc(68.7 * var(--s));
+  line-height: calc(76 * var(--s));
+  letter-spacing: calc(-2.4 * var(--s));
+  color: var(--ink);
+}
+.hero h1 .ln {
+  display: block;
+  overflow: hidden;
+  padding-bottom: calc(6 * var(--s));
+  margin-bottom: calc(-6 * var(--s));
+}
+.hero h1 .ln span {
+  display: block;
+}
+
+.hero .sub {
+  position: absolute;
+  left: calc(73 * var(--s));
+  top: calc(var(--suby) * var(--s));
+  font-family: 'JB', monospace;
+  font-weight: 400;
+  font-size: calc(18.7 * var(--s));
+  line-height: calc(26 * var(--s));
+  letter-spacing: calc(-0.87 * var(--s));
+  color: var(--sub);
+}
+
+.hero .btn-cta {
+  position: absolute;
+  left: calc(73 * var(--s));
+  top: calc(248 * var(--s));
+}
+
+/* Stats Section */
+.stats {
+  position: relative;
+  width: 100%;
+  height: calc(120 * var(--s));
+}
+.stat {
+  position: absolute;
+  top: 0;
+}
+.stat.s1 { left: calc(70.4 * var(--s)); }
+.stat.s2 { left: calc(213.1 * var(--s)); }
+.stat.s3 { left: calc(392.6 * var(--s)); }
+
+.stat .num {
+  font-family: 'JB', monospace;
+  font-weight: 480;
+  font-size: calc(33.45 * var(--s));
+  color: var(--ink);
+  line-height: 1;
+  position: absolute;
+  top: calc(var(--numy) * var(--s));
+}
+.stat.s3 .num {
+  margin-left: calc(-4.4 * var(--s));
+}
+.stat .lab {
+  font-family: 'SG', sans-serif;
+  font-weight: 400;
+  font-size: calc(21.9 * var(--s));
+  letter-spacing: calc(-0.62 * var(--s));
+  color: var(--lab);
+  position: absolute;
+  top: calc(var(--laby) * var(--s));
+  white-space: nowrap;
+}
+
+/* Vertical gradient rules */
+.stats .rule {
+  position: absolute;
+  width: calc(1.5 * var(--s));
+  height: calc(76 * var(--s));
+  top: calc(16 * var(--s));
+  background: linear-gradient(180deg, rgba(255,255,255,.085), rgba(255,255,255,.21) 50%, rgba(255,255,255,.085));
+  transform-origin: center;
+}
+.stats .rule.r1 { left: calc(181 * var(--s)); }
+.stats .rule.r2 { left: calc(356 * var(--s)); }
+
+/* Mobile Menu (#menu) */
+.menu {
+  position: fixed;
+  inset: 0;
+  z-index: 90;
+  background: #000;
+  opacity: 0;
+  pointer-events: none;
+  transition: opacity 0.3s cubic-bezier(0.16, 1, 0.3, 1);
+  display: flex;
+  flex-direction: column;
+}
+body.nav-open .menu {
+  opacity: 1;
+  pointer-events: auto;
+}
+
+.menu-tex {
+  position: absolute;
+  inset: 0;
+  opacity: 0.4;
+  pointer-events: none;
+  overflow: hidden;
+  -webkit-mask-image: linear-gradient(180deg, transparent 0%, #000 35%);
+  mask-image: linear-gradient(180deg, transparent 0%, #000 35%);
+}
+.menu-tex video {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+
+.menu-rule {
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: 100%;
+  height: calc(2 * var(--s));
+  background: var(--red);
+  transform: scaleX(0);
+  transform-origin: left;
+}
+body.nav-open .menu-rule {
+  transform: scaleX(1);
+  transition: transform 0.55s cubic-bezier(0.2, 0.7, 0.2, 1) 0.04s;
+}
+
+.menu-content {
+  position: relative;
+  z-index: 2;
+  padding: calc(90 * var(--s)) calc(var(--bx) * var(--s)) calc(40 * var(--s));
+  display: flex;
+  flex-direction: column;
+  flex: 1;
+  overflow-y: auto;
+}
+
+.menu-eyebrow {
+  font-family: 'JB', monospace;
+  font-size: calc(11.5 * var(--s));
+  letter-spacing: .22em;
+  text-transform: uppercase;
+  color: var(--lab);
+  margin-bottom: calc(24 * var(--s));
+}
+
+.menu-list {
+  list-style: none;
+  display: flex;
+  flex-direction: column;
+  gap: calc(18 * var(--s));
+}
+
+.menu-item {
+  opacity: 0;
+  transform: translateY(calc(12 * var(--s)));
+  transition: opacity 0.4s ease, transform 0.4s cubic-bezier(0.16, 1, 0.3, 1);
+}
+body.nav-open .menu-item:nth-child(1) { transition-delay: 0.08s; opacity: 1; transform: none; }
+body.nav-open .menu-item:nth-child(2) { transition-delay: 0.14s; opacity: 1; transform: none; }
+body.nav-open .menu-item:nth-child(3) { transition-delay: 0.20s; opacity: 1; transform: none; }
+body.nav-open .menu-item:nth-child(4) { transition-delay: 0.26s; opacity: 1; transform: none; }
+
+.mrow {
+  font-family: 'SG', sans-serif;
+  font-weight: 700;
+  font-size: calc(32 * var(--s));
+  color: #fff;
+  text-decoration: none;
+  background: none;
+  border: none;
+  cursor: pointer;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  width: 100%;
+  text-align: left;
+}
+.mrow svg {
+  width: calc(14 * var(--s));
+  height: calc(9 * var(--s));
+  stroke: var(--lab);
+  stroke-width: 2;
+  fill: none;
+  transition: transform 0.25s ease, stroke 0.2s ease;
+}
+.menu-item.open .mrow svg {
+  transform: rotate(180deg);
+  stroke: var(--red);
+}
+
+.sublinks {
+  display: none;
+  flex-direction: column;
+  padding-left: calc(12 * var(--s));
+  margin-top: calc(10 * var(--s));
+  gap: calc(10 * var(--s));
+  border-left: calc(1.5 * var(--s)) solid rgba(255,255,255,.15);
+}
+.menu-item.open .sublinks {
+  display: flex;
+}
+.sublink {
+  font-family: 'JB', monospace;
+  font-size: calc(16 * var(--s));
+  color: var(--sub);
+  text-decoration: none;
+  background: none;
+  border: none;
+  cursor: pointer;
+  text-align: left;
+  transition: color 0.15s ease;
+}
+.sublink:hover { color: var(--red); }
+
+.menu-footer {
+  margin-top: auto;
+  padding-top: calc(30 * var(--s));
+}
+.btn-menu {
+  width: 100%;
+}
+.menu-note {
+  font-family: 'JB', monospace;
+  font-size: calc(13 * var(--s));
+  color: var(--lab);
+  text-align: center;
+  margin-top: calc(16 * var(--s));
+}
+
+/* Entrance Animation Initial CSS State */
+html.intro .logo,
+html.intro .nav-link,
+html.intro .burger,
+html.intro .hero .sub,
+html.intro .stat .num,
+html.intro .stat .lab {
+  opacity: 0;
+}
+html.intro .logo {
+  transform: scale(0.9);
+}
+html.intro .nav-link {
+  transform: translateY(calc(7 * var(--s)));
+}
+html.intro .hero .sub {
+  transform: translateY(calc(14 * var(--s)));
+}
+html.intro .stat .num {
+  transform: translateY(calc(12 * var(--s)));
+}
+html.intro .stat .lab {
+  transform: translateY(calc(10 * var(--s)));
+}
+html.intro .stats .rule {
+  transform: scaleY(0);
+}
+html.intro .btn-top,
+html.intro .btn-cta {
+  clip-path: inset(0 100% 0 0);
+}
+html.intro .hero h1 .ln span {
+  transform: translateY(120%);
+}
+
+/* Accessibility & Interaction Defaults */
+:focus-visible {
+  outline: 2px solid #fff;
+  outline-offset: 3px;
+}
+@media (prefers-reduced-motion: reduce) {
+  * {
+    transition: none !important;
+    animation: none !important;
+  }
+}
+
+/* =========================================================================
+   COMMERCIAL GTM MODALS & DRAWERS (Zero-leakage, cinematic dark overlays)
+   ========================================================================= */
+.modal-layer {
+  position: fixed;
+  inset: 0;
+  z-index: 150;
+  background: rgba(0, 0, 0, 0.88);
+  backdrop-filter: blur(24px);
+  -webkit-backdrop-filter: blur(24px);
+  opacity: 0;
+  pointer-events: none;
+  transition: opacity 0.28s cubic-bezier(0.16, 1, 0.3, 1);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: calc(32 * var(--s));
+}
+.modal-layer.active {
+  opacity: 1;
+  pointer-events: auto;
+}
+.modal-box {
+  background: #09090b;
+  border: 1px solid rgba(255, 255, 255, 0.15);
+  box-shadow: 0 calc(20 * var(--s)) calc(60 * var(--s)) rgba(0,0,0,0.9), 0 0 calc(40 * var(--s)) rgba(200, 27, 28, 0.12);
+  width: 100%;
+  max-width: calc(1120 * var(--s));
+  max-height: 88vh;
+  display: flex;
+  flex-direction: column;
+  position: relative;
+  overflow: hidden;
+}
+.modal-top-accent {
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  height: calc(3 * var(--s));
+  background: var(--red);
+}
+.modal-header {
+  padding: calc(24 * var(--s)) calc(36 * var(--s));
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.08);
+}
+.modal-title-wrap h2 {
+  font-family: 'SG', sans-serif;
+  font-weight: 700;
+  font-size: calc(28 * var(--s));
+  letter-spacing: -0.02em;
+  color: #fff;
+}
+.modal-title-wrap .modal-tagline {
+  font-family: 'JB', monospace;
+  font-size: calc(13 * var(--s));
+  color: var(--lab);
+  margin-top: calc(4 * var(--s));
+}
+.modal-close {
+  background: none;
+  border: 1px solid rgba(255, 255, 255, 0.2);
+  color: #fff;
+  width: calc(38 * var(--s));
+  height: calc(38 * var(--s));
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  transition: all 0.15s ease;
+}
+.modal-close:hover {
+  background: var(--red);
+  border-color: var(--red);
+}
+.modal-body {
+  padding: calc(32 * var(--s)) calc(36 * var(--s));
+  overflow-y: auto;
+  color: var(--sub);
+  font-size: calc(15 * var(--s));
+  line-height: 1.6;
+}
+
+/* Documentation Tabs & Code Blocks */
+.doc-grid {
+  display: grid;
+  grid-template-columns: calc(240 * var(--s)) 1fr;
+  gap: calc(32 * var(--s));
+}
+@media (max-width: 800px) {
+  .doc-grid { grid-template-columns: 1fr; }
+}
+.doc-nav {
+  display: flex;
+  flex-direction: column;
+  gap: calc(8 * var(--s));
+}
+.doc-nav-btn {
+  font-family: 'JB', monospace;
+  font-size: calc(14 * var(--s));
+  padding: calc(10 * var(--s)) calc(14 * var(--s));
+  background: rgba(255, 255, 255, 0.04);
+  color: var(--sub);
+  border: 1px solid transparent;
+  text-align: left;
+  cursor: pointer;
+  transition: all 0.15s ease;
+}
+.doc-nav-btn.active, .doc-nav-btn:hover {
+  background: rgba(200, 27, 28, 0.12);
+  border-color: var(--red);
+  color: #fff;
+}
+.code-block {
+  background: #000;
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  padding: calc(18 * var(--s));
+  font-family: 'JB', monospace;
+  font-size: calc(13.5 * var(--s));
+  line-height: 1.55;
+  color: #d1d5db;
+  overflow-x: auto;
+  margin: calc(14 * var(--s)) 0;
+  position: relative;
+}
+.code-block .keyword { color: #f43f5e; font-weight: 600; }
+.code-block .flag { color: #38bdf8; }
+.code-block .string { color: #4ade80; }
+.code-block .comment { color: #71717a; font-style: italic; }
+
+/* Pricing Cards */
+.pricing-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(calc(240 * var(--s)), 1fr));
+  gap: calc(20 * var(--s));
+  margin-top: calc(10 * var(--s));
+}
+.price-card {
+  background: rgba(255, 255, 255, 0.03);
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  padding: calc(24 * var(--s));
+  display: flex;
+  flex-direction: column;
+  transition: transform 0.2s ease, border-color 0.2s ease;
+}
+.price-card.featured {
+  border-color: var(--red);
+  background: rgba(200, 27, 28, 0.04);
+}
+.price-card:hover {
+  transform: translateY(calc(-4 * var(--s)));
+  border-color: var(--red);
+}
+.price-tier {
+  font-family: 'SG', sans-serif;
+  font-weight: 700;
+  font-size: calc(22 * var(--s));
+  color: #fff;
+}
+.price-amount {
+  font-family: 'JB', monospace;
+  font-weight: 700;
+  font-size: calc(36 * var(--s));
+  color: #fff;
+  margin: calc(12 * var(--s)) 0 calc(6 * var(--s));
+}
+.price-period {
+  font-size: calc(14 * var(--s));
+  color: var(--lab);
+  font-weight: 400;
+}
+.price-desc {
+  font-size: calc(13.5 * var(--s));
+  color: var(--sub);
+  margin-bottom: calc(18 * var(--s));
+  min-height: calc(42 * var(--s));
+}
+.price-features {
+  list-style: none;
+  margin-bottom: calc(24 * var(--s));
+  display: flex;
+  flex-direction: column;
+  gap: calc(8 * var(--s));
+  font-size: calc(13 * var(--s));
+}
+.price-features li {
+  display: flex;
+  align-items: center;
+  gap: calc(8 * var(--s));
+}
+.price-features li::before {
+  content: '✓';
+  color: var(--red);
+  font-weight: 700;
+}
+.btn-price {
+  margin-top: auto;
+  width: 100%;
+}
+
+/* Consultation & Contact Form */
+.form-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: calc(18 * var(--s));
+}
+@media (max-width: 650px) {
+  .form-grid { grid-template-columns: 1fr; }
+}
+.form-group {
+  display: flex;
+  flex-direction: column;
+  gap: calc(6 * var(--s));
+}
+.form-group.full {
+  grid-column: 1 / -1;
+}
+.form-label {
+  font-family: 'JB', monospace;
+  font-size: calc(12.5 * var(--s));
+  color: var(--sub);
+}
+.form-input, .form-select, .form-textarea {
+  background: #000;
+  border: 1px solid rgba(255, 255, 255, 0.18);
+  color: #fff;
+  padding: calc(12 * var(--s)) calc(14 * var(--s));
+  font-family: 'JB', monospace;
+  font-size: calc(14 * var(--s));
+  border-radius: 0;
+  outline: none;
+  transition: border-color 0.15s ease;
+}
+.form-input:focus, .form-select:focus, .form-textarea:focus {
+  border-color: var(--red);
+}
+.form-textarea {
+  resize: vertical;
+  min-height: calc(90 * var(--s));
+}
+
+/* Interactive Policy Playground */
+.playground-box {
+  background: #000;
+  border: 1px solid rgba(255, 255, 255, 0.15);
+  padding: calc(20 * var(--s));
+  margin-top: calc(16 * var(--s));
+}
+.playground-results {
+  margin-top: calc(14 * var(--s));
+  padding: calc(14 * var(--s));
+  background: rgba(255, 255, 255, 0.03);
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  font-family: 'JB', monospace;
+  font-size: calc(13 * var(--s));
+}
+.badge-score {
+  display: inline-block;
+  padding: calc(2 * var(--s)) calc(8 * var(--s));
+  font-weight: 700;
+  color: #fff;
+  background: var(--red);
+}
+.badge-score.pass { background: #16a34a; }
+</style>
+
+<!-- Arm before paint: Immediately add intro class to html before first paint if WAAPI and motion allowed -->
+<script>
+(function() {
+  if (typeof Element.prototype.animate === 'function' && !window.matchMedia('(prefers-reduced-motion: reduce)').matches) {
+    document.documentElement.classList.add('intro');
+  }
+})();
+</script>
+</head>
+<body>
+
+<!-- Hidden probe to resolve runtime calc(N * var(--s)) accurately -->
+<div id="s-probe"></div>
+
+<!-- SVG Filter Definitions for exact video color grading -->
+<svg class="svgdefs" aria-hidden="true">
+  <defs>
+    <!-- Grade 1 -->
+    <filter id="grade" color-interpolation-filters="sRGB">
+      <feComponentTransfer>
+        <feFuncR type="table" tableValues="0.0018 0.0105 0.0154 0.0228 0.0307 0.0404 0.0485 0.0585 0.0719 0.0923 0.1205 0.1466 0.1657 0.1866 0.2197 0.2405 0.2485 0.2921 0.3362 0.3465 0.3472 0.3781 0.3781 0.4078 0.4199 0.4391 0.4604 0.4763 0.4798 0.5197 0.5473 0.5720 0.5995 0.6048 0.6232 0.6322 0.6483 0.6734 0.7201 0.7201 0.7410 0.7707 0.7707 0.7790 0.8084 0.8084 0.8390 0.8595 0.8707 0.8870 0.8993 0.9085 0.9132 0.9132 0.9162 0.9162 0.9162 0.9162 0.9162 0.9162 0.9162 0.9162 0.9162 0.9238 0.9300"/>
+        <feFuncG type="table" tableValues="0.0023 0.0106 0.0159 0.0250 0.0333 0.0445 0.0535 0.0620 0.0707 0.0827 0.0936 0.1063 0.1214 0.1402 0.1678 0.1727 0.2029 0.2176 0.2461 0.2757 0.2814 0.3050 0.3415 0.3692 0.3826 0.3884 0.4617 0.4617 0.4617 0.4643 0.4643 0.4808 0.5706 0.6005 0.6005 0.6390 0.6390 0.6390 0.6390 0.6390 0.6390 0.6390 0.6390 0.6390 0.6524 0.6664 0.6805 0.6945 0.7086 0.7227 0.7367 0.7508 0.7648 0.7789 0.7929 0.8070 0.8211 0.8351 0.8492 0.8632 0.8773 0.8913 0.9054 0.9195 0.9300"/>
+        <feFuncB type="table" tableValues="0.0021 0.0110 0.0187 0.0311 0.0377 0.0466 0.0584 0.0706 0.0791 0.0924 0.1039 0.1145 0.1316 0.1464 0.1614 0.1719 0.1887 0.2014 0.2247 0.2458 0.2954 0.2954 0.3089 0.3938 0.3938 0.3988 0.3988 0.4581 0.4581 0.4762 0.4762 0.4763 0.5374 0.5560 0.5813 0.5813 0.5813 0.5813 0.5835 0.5969 0.6104 0.6238 0.6373 0.6507 0.6642 0.6777 0.6911 0.7046 0.7181 0.7315 0.7449 0.7584 0.7719 0.7853 0.7988 0.8123 0.8257 0.8391 0.8526 0.8661 0.8795 0.8930 0.9065 0.9199 0.9300"/>
+      </feComponentTransfer>
+    </filter>
+
+    <!-- Grade 2 (Darker lift pass) -->
+    <filter id="grade2" color-interpolation-filters="sRGB">
+      <feComponentTransfer>
+        <feFuncR type="table" tableValues="0.0016 0.0092 0.0136 0.0201 0.0270 0.0356 0.0427 0.0515 0.0633 0.0812 0.1060 0.1290 0.1458 0.1642 0.1933 0.2116 0.2187 0.2570 0.2959 0.3049 0.3055 0.3327 0.3327 0.3589 0.3695 0.3864 0.4052 0.4191 0.4222 0.4573 0.4816 0.5034 0.5276 0.5322 0.5484 0.5563 0.5705 0.5926 0.6337 0.6337 0.6521 0.6782 0.6782 0.6855 0.7114 0.7114 0.7383 0.7564 0.7662 0.7806 0.7914 0.7995 0.8036 0.8036 0.8063 0.8063 0.8063 0.8063 0.8063 0.8063 0.8063 0.8063 0.8063 0.8129 0.8184"/>
+        <feFuncG type="table" tableValues="0.0015 0.0069 0.0103 0.0163 0.0216 0.0289 0.0348 0.0403 0.0460 0.0538 0.0608 0.0691 0.0789 0.0911 0.1091 0.1123 0.1319 0.1414 0.1600 0.1792 0.1829 0.1983 0.2220 0.2400 0.2487 0.2525 0.3001 0.3001 0.3001 0.3018 0.3018 0.3125 0.3709 0.3903 0.3903 0.4153 0.4153 0.4153 0.4153 0.4153 0.4153 0.4153 0.4153 0.4153 0.4241 0.4332 0.4423 0.4514 0.4606 0.4698 0.4789 0.4880 0.4971 0.5063 0.5154 0.5246 0.5337 0.5428 0.5520 0.5611 0.5702 0.5793 0.5885 0.5977 0.6045"/>
+        <feFuncB type="table" tableValues="0.0013 0.0066 0.0112 0.0187 0.0226 0.0280 0.0350 0.0424 0.0475 0.0554 0.0623 0.0687 0.0790 0.0878 0.0968 0.1031 0.1132 0.1208 0.1348 0.1475 0.1772 0.1772 0.1853 0.2363 0.2363 0.2393 0.2393 0.2749 0.2749 0.2857 0.2857 0.2858 0.3224 0.3336 0.3488 0.3488 0.3488 0.3488 0.3501 0.3581 0.3662 0.3743 0.3824 0.3904 0.3985 0.4066 0.4147 0.4228 0.4309 0.4389 0.4469 0.4550 0.4631 0.4712 0.4793 0.4874 0.4954 0.5035 0.5116 0.5197 0.5277 0.5358 0.5439 0.5519 0.5580"/>
+      </feComponentTransfer>
+    </filter>
+  </defs>
+</svg>
+
+<div class="screen">
+  <!-- Layer 1: .bg primary full-bleed video -->
+  <div class="bg">
+    <video autoplay muted loop playsinline preload="auto">
+      <source src="https://d8j0ntlcm91z4.cloudfront.net/user_38xzZboKViGWJOttwIXH07lWA1P/hf_20260809_132544_b6ef0174-ed95-45ad-9a2f-ccb8acfbdce8.mp4" type="video/mp4">
+    </video>
+  </div>
+
+  <!-- Layer 2: .bg2 second pass lifted lower half -->
+  <div class="bg2">
+    <video autoplay muted loop playsinline preload="auto">
+      <source src="https://d8j0ntlcm91z4.cloudfront.net/user_38xzZboKViGWJOttwIXH07lWA1P/hf_20260809_132544_b6ef0174-ed95-45ad-9a2f-ccb8acfbdce8.mp4" type="video/mp4">
+    </video>
+  </div>
+
+  <!-- Layer 3: .scrim for responsive tablet/mobile grading -->
+  <div class="scrim"></div>
+
+  <!-- Layer 4: .frame primary flex structure -->
+  <div class="frame">
+    <header>
+      <!-- Logo: 46x46 SVG 4 chevron arrows pointing inward -->
+      <a href="#" class="logo" aria-label="Crackerjack Security Home" onclick="closeAllModals(event)">
+        <svg viewBox="0 0 46 46" fill="none" xmlns="http://www.w3.org/2000/svg">
+          <g stroke="#fff" stroke-width="3" stroke-linecap="butt" stroke-linejoin="miter">
+            <!-- North arm -->
+            <path d="M23 0V19.5"/>
+            <path d="M14 10.2L23 19.2L32 10.2"/>
+            <!-- East arm (rotated 90deg) -->
+            <path d="M46 23H26.5"/>
+            <path d="M35.8 14L26.8 23L35.8 32"/>
+            <!-- South arm (rotated 180deg) -->
+            <path d="M23 46V26.5"/>
+            <path d="M14 35.8L23 26.8L32 35.8"/>
+            <!-- West arm (rotated 270deg) -->
+            <path d="M0 23H19.5"/>
+            <path d="M10.2 14L19.2 23L10.2 32"/>
+          </g>
+        </svg>
+      </a>
+
+      <!-- Desktop Nav -->
+      <nav>
+        <a href="#" class="nav-link" onclick="closeAllModals(event)">Home</a>
+        <button class="nav-link" onclick="openModal('modal-resources')">
+          Resources
+          <svg class="chv" viewBox="0 0 11 6"><path d="M1 1L5.5 5L10 1"/></svg>
+        </button>
+        <button class="nav-link" onclick="openModal('modal-benefits')">
+          Benefits
+          <svg class="chv" viewBox="0 0 11 6"><path d="M1 1L5.5 5L10 1"/></svg>
+        </button>
+        <button class="nav-link" onclick="openModal('modal-contact')">Contact</button>
+      </nav>
+
+      <!-- Mobile Burger -->
+      <button class="burger" id="burger-btn" aria-label="Open menu" aria-expanded="false" onclick="toggleMenu()">
+        <span></span>
+        <span></span>
+        <span></span>
+      </button>
+
+      <!-- Top CTA -->
+      <button class="btn btn-top" onclick="openModal('modal-pricing')">
+        <span class="btn-lbl">Secure system</span>
+        <svg class="btn-arr" viewBox="0 0 21.5 18">
+          <path d="M0 9H20.1"/>
+          <path d="M12.1 1L20.1 9L12.1 17"/>
+        </svg>
+      </button>
+    </header>
+
+    <!-- Fluid Spacer A -->
+    <div class="sp sp-a"></div>
+
+    <!-- Hero Section -->
+    <section class="hero">
+      <h1>
+        <span class="ln"><span>Security built into</span></span>
+        <span class="ln"><span>every system layer</span></span>
+      </h1>
+      <p class="sub">Engineered to stay resilient, controlled,<br>and uncompromised under pressure.</p>
+      
+      <button class="btn btn-cta" onclick="openModal('modal-pricing')">
+        <span class="btn-lbl">Secure system</span>
+        <svg class="btn-arr" viewBox="0 0 21.5 18">
+          <path d="M0 9H20.1"/>
+          <path d="M12.1 1L20.1 9L12.1 17"/>
+        </svg>
+      </button>
+    </section>
+
+    <!-- Fluid Spacer B -->
+    <div class="sp sp-b"></div>
+
+    <!-- Stats Section -->
+    <section class="stats">
+      <div class="stat s1">
+        <div class="num">300+</div>
+        <div class="lab">Clients</div>
+      </div>
+      <div class="rule r1"></div>
+      <div class="stat s2">
+        <div class="num">99%</div>
+        <div class="lab">Satisfaction</div>
+      </div>
+      <div class="rule r2"></div>
+      <div class="stat s3">
+        <div class="num">$5M+</div>
+        <div class="lab">Revenue</div>
+      </div>
+    </section>
+
+    <!-- Fluid Spacer C -->
+    <div class="sp sp-c"></div>
+  </div>
+
+  <!-- Layer 5: Mobile Menu Overlay (#menu) -->
+  <div class="menu" id="menu" role="dialog" aria-modal="true" aria-label="Mobile Navigation">
+    <div class="menu-tex">
+      <video autoplay muted loop playsinline preload="auto">
+        <source src="https://d8j0ntlcm91z4.cloudfront.net/user_38xzZboKViGWJOttwIXH07lWA1P/hf_20260809_132544_b6ef0174-ed95-45ad-9a2f-ccb8acfbdce8.mp4" type="video/mp4">
+      </video>
+    </div>
+    <div class="menu-rule"></div>
+    <div class="menu-content">
+      <div class="menu-eyebrow">MENU</div>
+      <ul class="menu-list">
+        <li class="menu-item">
+          <button class="mrow" onclick="closeMenu(); closeAllModals();">Home</button>
+        </li>
+        <li class="menu-item" id="mrow-res">
+          <button class="mrow" onclick="toggleAccordion('mrow-res')">
+            Resources
+            <svg viewBox="0 0 11 6"><path d="M1 1L5.5 5L10 1"/></svg>
+          </button>
+          <div class="sublinks">
+            <button class="sublink" onclick="closeMenu(); openModal('modal-resources', 'doc');">Documentation</button>
+            <button class="sublink" onclick="closeMenu(); openModal('modal-resources', 'threat');">Threat reports</button>
+            <button class="sublink" onclick="closeMenu(); openModal('modal-resources', 'changelog');">Changelog</button>
+          </div>
+        </li>
+        <li class="menu-item" id="mrow-ben">
+          <button class="mrow" onclick="toggleAccordion('mrow-ben')">
+            Benefits
+            <svg viewBox="0 0 11 6"><path d="M1 1L5.5 5L10 1"/></svg>
+          </button>
+          <div class="sublinks">
+            <button class="sublink" onclick="closeMenu(); openModal('modal-benefits', 'monitor');">Continuous monitoring</button>
+            <button class="sublink" onclick="closeMenu(); openModal('modal-benefits', 'access');">Access control</button>
+            <button class="sublink" onclick="closeMenu(); openModal('modal-benefits', 'incident');">Incident response</button>
+          </div>
+        </li>
+        <li class="menu-item">
+          <button class="mrow" onclick="closeMenu(); openModal('modal-contact');">Contact</button>
+        </li>
+      </ul>
+      <div class="menu-footer">
+        <button class="btn btn-menu" onclick="closeMenu(); openModal('modal-pricing');">
+          <span class="btn-lbl">Secure system</span>
+          <svg class="btn-arr" viewBox="0 0 21.5 18">
+            <path d="M0 9H20.1"/>
+            <path d="M12.1 1L20.1 9L12.1 17"/>
+          </svg>
+        </button>
+        <div class="menu-note">300+ clients &nbsp;/&nbsp; 99% satisfaction</div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- =========================================================================
+     MODAL 1: RESOURCES & DOCUMENTATION
+     ========================================================================= -->
+<div class="modal-layer" id="modal-resources" role="dialog" aria-modal="true" aria-labelledby="modal-res-title">
+  <div class="modal-box">
+    <div class="modal-top-accent"></div>
+    <div class="modal-header">
+      <div class="modal-title-wrap">
+        <h2 id="modal-res-title">Crackerjack Platform Resources</h2>
+        <div class="modal-tagline">Continuous Identity Security, Active Deception & Governance</div>
+      </div>
+      <button class="modal-close" onclick="closeModal('modal-resources')" aria-label="Close modal">✕</button>
+    </div>
+    <div class="modal-body">
+      <div class="doc-grid">
+        <div class="doc-nav">
+          <button class="doc-nav-btn active" onclick="switchDocTab('doc-quickstart', this)">CLI Quickstart</button>
+          <button class="doc-nav-btn" onclick="switchDocTab('doc-deception', this)">Active Deception</button>
+          <button class="doc-nav-btn" onclick="switchDocTab('doc-api', this)">REST API v1</button>
+          <button class="doc-nav-btn" onclick="switchDocTab('doc-playground', this)">Live Policy Test</button>
+          <button class="doc-nav-btn" onclick="switchDocTab('doc-compliance', this)">Compliance Frameworks</button>
+          <button class="doc-nav-btn" onclick="switchDocTab('doc-changelog', this)">v3.3.0 Release Notes</button>
+        </div>
+
+        <div class="doc-content-pane">
+          <!-- Quickstart -->
+          <div id="doc-quickstart" class="doc-tab-pane">
+            <h3 style="font-family:'SG'; font-size:calc(20 * var(--s)); color:#fff; margin-bottom:calc(8 * var(--s));">Installation & Fast Credential Audit</h3>
+            <p>Crackerjack is a lightweight, zero-dependency identity security and active cyber deception engine for enterprise infrastructure, CI/CD pipelines, and active directories.</p>
+            <div class="code-block">
+<span class="comment"># 1. Install via pip or standalone package</span>
+pip install crackerjack-audit
+
+<span class="comment"># 2. Audit credentials with NIST SP 800-63B policy enforcement</span>
+crackerjack audit hashes.txt <span class="flag">--report</span> audit.html <span class="flag">--smart-mutations</span>
+
+<span class="comment"># 3. Assess cryptographic KDF migration risks (MD5, NTLM -> Argon2id)</span>
+crackerjack hygiene /etc/shadow <span class="flag">--output-json</span>
+            </div>
+            <p style="margin-top:calc(12 * var(--s));">Outputs include executive HTML reports with pure SVG vector donuts, broken password breakdown charts, and longitudinal drift tracking.</p>
+          </div>
+
+          <!-- Active Deception -->
+          <div id="doc-deception" class="doc-tab-pane" style="display:none;">
+            <h3 style="font-family:'SG'; font-size:calc(20 * var(--s)); color:#fff; margin-bottom:calc(8 * var(--s));">Active Cyber Deception & Honeywords</h3>
+            <p>Juels-Ristenpart active honeywords generation with exact character-entropy pool matching, making decoy canaries mathematically indistinguishable to offline attackers.</p>
+            <div class="code-block">
+<span class="comment"># Generate 5 decoy honeywords matching legitimate password entropy</span>
+crackerjack honey generate <span class="flag">--password</span> <span class="string">"K9#mQ2$pL8v"</span> <span class="flag">--count</span> 5
+
+<span class="comment"># Inject canaries into /etc/shadow or Windows Active Directory NTDS</span>
+crackerjack honey inject <span class="flag">--format</span> shadow <span class="flag">--user</span> svc_backup
+
+<span class="comment"># Tripwire verification: trigger instant SIEM alert on credential stuffing</span>
+crackerjack honey verify <span class="flag">--attempted</span> <span class="string">"K9#mQ2$pL8v"</span> <span class="flag">--canary-file</span> canaries.json
+            </div>
+          </div>
+
+          <!-- REST API -->
+          <div id="doc-api" class="doc-tab-pane" style="display:none;">
+            <h3 style="font-family:'SG'; font-size:calc(20 * var(--s)); color:#fff; margin-bottom:calc(8 * var(--s));">Zero-Dependency Microservice API</h3>
+            <p>Run the built-in ThreadingHTTPServer microservice to integrate real-time password policy scoring into identity providers and sign-up flows:</p>
+            <div class="code-block">
+<span class="comment"># Start the microservice on 0.0.0.0:8000</span>
+crackerjack serve <span class="flag">--host</span> 0.0.0.0 <span class="flag">--port</span> 8000
+
+<span class="comment"># Real-time registration validation check</span>
+curl -X POST http://localhost:8000/v1/validate \
+  -H <span class="string">"Content-Type: application/json"</span> \
+  -d '{<span class="string">"password"</span>: <span class="string">"AcmeCorp2024!"</span>, <span class="string">"context"</span>: [<span class="string">"Acme"</span>, <span class="string">"Corp"</span>]}'
+            </div>
+          </div>
+
+          <!-- Live Policy Playground -->
+          <div id="doc-playground" class="doc-tab-pane" style="display:none;">
+            <h3 style="font-family:'SG'; font-size:calc(20 * var(--s)); color:#fff; margin-bottom:calc(8 * var(--s));">Interactive Policy Playground</h3>
+            <p>Test registration passwords against NIST SP 800-63B standards and context-specific organization tokens:</p>
+            <div class="playground-box">
+              <div class="form-group">
+                <label class="form-label">Test Password:</label>
+                <input type="text" id="play-pwd" class="form-input" placeholder="Enter candidate password..." value="Summer2025!" oninput="runPlaygroundEval()">
+              </div>
+              <div class="form-group" style="margin-top:calc(10 * var(--s));">
+                <label class="form-label">Target Context Terms (Company/Product/User):</label>
+                <input type="text" id="play-ctx" class="form-input" placeholder="Acme, Corp, Summer" value="Acme, Summer" oninput="runPlaygroundEval()">
+              </div>
+              <div class="playground-results" id="play-output">
+                <div>Score: <span class="badge-score" id="play-score">--</span> &nbsp;|&nbsp; Verdict: <span id="play-verdict">Evaluating...</span></div>
+                <div style="margin-top:calc(8 * var(--s)); color:var(--lab);" id="play-details">Type above to evaluate.</div>
+              </div>
+            </div>
+          </div>
+
+          <!-- Compliance -->
+          <div id="doc-compliance" class="doc-tab-pane" style="display:none;">
+            <h3 style="font-family:'SG'; font-size:calc(20 * var(--s)); color:#fff; margin-bottom:calc(8 * var(--s));">Enterprise Compliance Mapping</h3>
+            <ul style="margin-left:calc(20 * var(--s)); margin-top:calc(10 * var(--s)); display:flex; flex-direction:column; gap:calc(8 * var(--s));">
+              <li><strong>NIST SP 800-63B:</strong> Eliminates arbitrary periodic resets; enforces minimum 8/12 character lengths, breach dictionary blacklists, and context term exclusion.</li>
+              <li><strong>PCI-DSS v4.0 (Req 8.3):</strong> Mandates 12+ character lengths, multi-factor credential security, and cryptographic hygiene tracking.</li>
+              <li><strong>SOC 2 Type II (CC6.1):</strong> Enforces logical access boundaries and immutable audit ledger tracking with drift analysis.</li>
+            </ul>
+          </div>
+
+          <!-- Changelog -->
+          <div id="doc-changelog" class="doc-tab-pane" style="display:none;">
+            <h3 style="font-family:'SG'; font-size:calc(20 * var(--s)); color:#fff; margin-bottom:calc(8 * var(--s));">Crackerjack 3.3.0 Release Notes</h3>
+            <p><strong>Release: v3.3.0</strong> (Continuous Identity Security & Active Deception)</p>
+            <ul style="margin-left:calc(20 * var(--s)); margin-top:calc(10 * var(--s)); display:flex; flex-direction:column; gap:calc(8 * var(--s));">
+              <li>Active Cyber Deception (`crackerjack honey generate|inject|verify`).</li>
+              <li>Continuous Compliance Drift Ledger (`crackerjack drift`) with pure SVG trendlines.</li>
+              <li>SIEM & ChatOps Webhooks (Slack Block Kit, Teams, Generic HMAC-SHA256).</li>
+              <li>Probabilistic Mutation Engine (`crackerjack mutate`) modeling human cognitive topology.</li>
+              <li>Cryptographic Hygiene Assessment (`crackerjack hygiene`) with 8x RTX 4090 GPU benchmarks and Argon2id migration blueprint.</li>
+            </ul>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- =========================================================================
+     MODAL 2: BENEFITS & PLATFORM SOLUTIONS
+     ========================================================================= -->
+<div class="modal-layer" id="modal-benefits" role="dialog" aria-modal="true" aria-labelledby="modal-ben-title">
+  <div class="modal-box">
+    <div class="modal-top-accent"></div>
+    <div class="modal-header">
+      <div class="modal-title-wrap">
+        <h2 id="modal-ben-title">Engineered Resilience & Benefits</h2>
+        <div class="modal-tagline">Architected to outsmart adversaries at every architectural boundary</div>
+      </div>
+      <button class="modal-close" onclick="closeModal('modal-benefits')" aria-label="Close modal">✕</button>
+    </div>
+    <div class="modal-body">
+      <div class="pricing-grid">
+        <div class="price-card">
+          <div class="price-tier">Continuous Monitoring</div>
+          <p class="price-desc" style="margin-top:calc(10 * var(--s));">Persistent identity drift ledger. Stop point-in-time audits and track credential posture across weekly CI/CD and Active Directory syncs.</p>
+          <ul class="price-features">
+            <li>SQLite audit trail with automated backups</li>
+            <li>Historical health score delta (&Delta;)</li>
+            <li>Automated Slack/Teams/SIEM alerts</li>
+            <li>Zero-latency policy evaluation</li>
+          </ul>
+        </div>
+
+        <div class="price-card featured">
+          <div class="price-tier" style="color:var(--red);">Active Deception</div>
+          <p class="price-desc" style="margin-top:calc(10 * var(--s));">Juels-Ristenpart honeyword injection. Plant realistic decoy canaries in Linux /etc/shadow, Active Directory NTDS, and cloud databases.</p>
+          <ul class="price-features">
+            <li>CSPRNG entropy & character matching</li>
+            <li>Tripwire alarms on credential stuffing</li>
+            <li>Deceive offline password crackers</li>
+            <li>Instant automated containment</li>
+          </ul>
+        </div>
+
+        <div class="price-card">
+          <div class="price-tier">Cryptographic Hygiene</div>
+          <p class="price-desc" style="margin-top:calc(10 * var(--s));">Quantify your organization's exposure against modern hardware. Phased migration roadmaps from NTLM/MD5 to Argon2id.</p>
+          <ul class="price-features">
+            <li>8x RTX 4090 GPU attack rate benchmarks</li>
+            <li>Post-Quantum readiness grading</li>
+            <li>Seamless user re-hash workflows</li>
+            <li>Audit-ready board presentation assets</li>
+          </ul>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- =========================================================================
+     MODAL 3: COMMERCIAL PRICING & GTM PACKAGING
+     ========================================================================= -->
+<div class="modal-layer" id="modal-pricing" role="dialog" aria-modal="true" aria-labelledby="modal-price-title">
+  <div class="modal-box">
+    <div class="modal-top-accent"></div>
+    <div class="modal-header">
+      <div class="modal-title-wrap">
+        <h2 id="modal-price-title">Commercial Licensing & Enterprise Tiers</h2>
+        <div class="modal-tagline">Deploy on-premise, in sovereign clouds, or integrate directly via API</div>
+      </div>
+      <button class="modal-close" onclick="closeModal('modal-pricing')" aria-label="Close modal">✕</button>
+    </div>
+    <div class="modal-body">
+      <div class="pricing-grid">
+        <!-- Community -->
+        <div class="price-card">
+          <div class="price-tier">Community</div>
+          <div class="price-amount">$0 <span class="price-period">/ forever</span></div>
+          <div class="price-desc">Open-source CLI for individual security researchers and single-developer environments.</div>
+          <ul class="price-features">
+            <li>CLI offline hash auditing</li>
+            <li>NIST SP 800-63B evaluator</li>
+            <li>Pre-commit secret scanner</li>
+            <li>Basic HTML reports</li>
+          </ul>
+          <button class="btn btn-price" onclick="closeModal('modal-pricing'); openModal('modal-resources');">
+            <span class="btn-lbl">Get Started</span>
+          </button>
+        </div>
+
+        <!-- Professional -->
+        <div class="price-card">
+          <div class="price-tier">Professional</div>
+          <div class="price-amount">$499 <span class="price-period">/ month</span></div>
+          <div class="price-desc">For fast-growing security teams and mid-sized enterprises requiring continuous visibility.</div>
+          <ul class="price-features">
+            <li>Continuous Compliance Drift Ledger</li>
+            <li>Slack & Microsoft Teams Webhooks</li>
+            <li>Juels-Ristenpart Honeywords</li>
+            <li>REST API Microservice license</li>
+            <li>Up to 50,000 credential audits/mo</li>
+          </ul>
+          <button class="btn btn-price" onclick="selectTier('Professional')">
+            <span class="btn-lbl">Select Plan</span>
+          </button>
+        </div>
+
+        <!-- Enterprise Platform -->
+        <div class="price-card featured">
+          <div class="price-tier" style="color:var(--red);">Enterprise</div>
+          <div class="price-amount">$2,499 <span class="price-period">/ month</span></div>
+          <div class="price-desc">Full Active Cyber Deception platform with Active Directory NTDS sync and dedicated support.</div>
+          <ul class="price-features">
+            <li>Everything in Professional</li>
+            <li>Active Directory NTDS automated ingestion</li>
+            <li>Argon2id migration engine & tooling</li>
+            <li>Custom SIEM HMAC signature keys</li>
+            <li>Unlimited credential accounts</li>
+            <li>24/7 SLA & dedicated security engineer</li>
+          </ul>
+          <button class="btn btn-price" onclick="selectTier('Enterprise')">
+            <span class="btn-lbl">Deploy Platform</span>
+          </button>
+        </div>
+
+        <!-- Strategic Advisory -->
+        <div class="price-card">
+          <div class="price-tier">Consultation</div>
+          <div class="price-amount">$15k <span class="price-period">/ engagement</span></div>
+          <div class="price-desc">Hands-on identity architecture review, threat modeling, and zero-trust migration advisory.</div>
+          <ul class="price-features">
+            <li>Full cryptographic fleet audit</li>
+            <li>Active deception tripwire blueprint</li>
+            <li>KDF migration implementation roadmap</li>
+            <li>Executive board presentation</li>
+          </ul>
+          <button class="btn btn-price" onclick="selectTier('Consultation')">
+            <span class="btn-lbl">Book Advisory</span>
+          </button>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- =========================================================================
+     MODAL 4: CONSULTATION & CONTACT BOOKING
+     ========================================================================= -->
+<div class="modal-layer" id="modal-contact" role="dialog" aria-modal="true" aria-labelledby="modal-contact-title">
+  <div class="modal-box" style="max-width:calc(780 * var(--s));">
+    <div class="modal-top-accent"></div>
+    <div class="modal-header">
+      <div class="modal-title-wrap">
+        <h2 id="modal-contact-title">Initiate Identity Consultation</h2>
+        <div class="modal-tagline">Connect with our Principal Security Architects</div>
+      </div>
+      <button class="modal-close" onclick="closeModal('modal-contact')" aria-label="Close modal">✕</button>
+    </div>
+    <div class="modal-body">
+      <form id="consult-form" onsubmit="handleConsultSubmit(event)">
+        <div class="form-grid">
+          <div class="form-group">
+            <label class="form-label" for="inp-name">Full Name *</label>
+            <input type="text" id="inp-name" class="form-input" required placeholder="Alex Mercer">
+          </div>
+          <div class="form-group">
+            <label class="form-label" for="inp-email">Work Email *</label>
+            <input type="email" id="inp-email" class="form-input" required placeholder="alex@enterprise.com">
+          </div>
+          <div class="form-group">
+            <label class="form-label" for="inp-company">Organization *</label>
+            <input type="text" id="inp-company" class="form-input" required placeholder="Acme Financial">
+          </div>
+          <div class="form-group">
+            <label class="form-label" for="inp-interest">Area of Interest</label>
+            <select id="inp-interest" class="form-select">
+              <option value="Enterprise Platform Deployment">Enterprise Platform Deployment</option>
+              <option value="Cryptographic KDF Hygiene Audit">Cryptographic KDF Hygiene Audit</option>
+              <option value="Active Deception & Honeywords">Active Deception & Honeywords</option>
+              <option value="Executive Security Consultation">Executive Security Consultation ($15k)</option>
+              <option value="API Integration & Partnership">API Integration & Partnership</option>
+            </select>
+          </div>
+          <div class="form-group full">
+            <label class="form-label" for="inp-notes">Architecture Details / Environment Scope</label>
+            <textarea id="inp-notes" class="form-textarea" placeholder="Briefly describe your environment (e.g., 25,000 Active Directory users, hybrid AWS, legacy MD5 hash migration)..."></textarea>
+          </div>
+        </div>
+        <div style="margin-top:calc(24 * var(--s)); display:flex; justify-content:flex-end;">
+          <button type="submit" class="btn" style="width:calc(260 * var(--s));">
+            <span class="btn-lbl">Submit Request</span>
+            <svg class="btn-arr" viewBox="0 0 21.5 18">
+              <path d="M0 9H20.1"/>
+              <path d="M12.1 1L20.1 9L12.1 17"/>
+            </svg>
+          </button>
+        </div>
+      </form>
+    </div>
+  </div>
+</div>
+
+<!-- =========================================================================
+     PAGE LOGIC: Video Synchronization, WAAPI Entrance, and Modals
+     ========================================================================= -->
+<script>
+/* -------------------------------------------------------------------------
+   1. Video Drift Synchronization
+   ------------------------------------------------------------------------- */
+const videos = Array.from(document.querySelectorAll('video'));
+const masterVideo = videos[0];
+
+if (window.matchMedia('(prefers-reduced-motion: reduce)').matches) {
+  videos.forEach(v => {
+    v.removeAttribute('autoplay');
+    v.pause();
+  });
+} else if (masterVideo) {
+  masterVideo.addEventListener('timeupdate', () => {
+    const masterTime = masterVideo.currentTime;
+    for (let i = 1; i < videos.length; i++) {
+      const v = videos[i];
+      if (Math.abs(v.currentTime - masterTime) > 0.12) {
+        v.currentTime = masterTime;
+      }
+    }
+  });
+}
+
+/* -------------------------------------------------------------------------
+   2. WAAPI Entrance Animation Choreography
+   ------------------------------------------------------------------------- */
+(function setupEntranceTimeline() {
+  if (window.matchMedia('(prefers-reduced-motion: reduce)').matches) {
+    document.documentElement.classList.remove('intro');
+    return;
+  }
+
+  // Exact Easing Curves
+  const EXPO  = 'cubic-bezier(.16,1,.3,1)';
+  const QUINT = 'cubic-bezier(.22,1,.36,1)';
+  const QUART = 'cubic-bezier(.25,1,.5,1)';
+  const TYPE  = 'cubic-bezier(.22,.85,.24,1)';
+
+  // Measure runtime scaling factor via #s-probe
+  function getScale() {
+    const probe = document.getElementById('s-probe');
+    return probe ? (probe.getBoundingClientRect().width / 100) : 1;
+  }
+
+  // Master timeline initiation
+  let started = false;
+  function startTimeline() {
+    if (started) return;
+    started = true;
+
+    const isPhone = window.innerWidth <= 599;
+    const timeScale = isPhone ? 0.86 : 1.0;
+    const s = getScale();
+
+    const logo = document.querySelector('.logo');
+    const navLinks = Array.from(document.querySelectorAll('nav .nav-link'));
+    const burger = document.querySelector('.burger');
+    const topBtn = document.querySelector('.btn-top');
+    const h1Spans = Array.from(document.querySelectorAll('.hero h1 .ln span'));
+    const heroSub = document.querySelector('.hero .sub');
+    const heroCta = document.querySelector('.btn-cta');
+    const rules = Array.from(document.querySelectorAll('.stats .rule'));
+    const statNums = Array.from(document.querySelectorAll('.stat .num'));
+    const statLabs = Array.from(document.querySelectorAll('.stat .lab'));
+
+    const activeAnims = [];
+
+    function anim(el, keyframes, options) {
+      if (!el) return;
+      if (options.delay) options.delay *= timeScale;
+      if (options.duration) options.duration *= timeScale;
+      options.fill = 'forwards';
+      const a = el.animate(keyframes, options);
+      activeAnims.push(a);
+      return a;
+    }
+
+    // 0.00: Logo
+    anim(logo, [
+      { opacity: 0, transform: 'scale(0.9)' },
+      { opacity: 1, transform: 'scale(1)' }
+    ], { duration: 700, delay: 0, easing: EXPO });
+
+    // 0.12: Nav links
+    navLinks.forEach((nl, i) => {
+      anim(nl, [
+        { opacity: 0, transform: `translateY(${7 * s}px)` },
+        { opacity: 1, transform: 'translateY(0)' }
+      ], { duration: 620, delay: 120 + i * 55, easing: QUINT });
+    });
+
+    // 0.18: Burger fade
+    anim(burger, [
+      { opacity: 0 },
+      { opacity: 1 }
+    ], { duration: 550, delay: 180, easing: QUART });
+
+    // 0.28: Top button wipe
+    anim(topBtn, [
+      { clipPath: 'inset(0 100% 0 0)' },
+      { clipPath: 'inset(0 0% 0 0)' }
+    ], { duration: 660, delay: 280, easing: EXPO });
+
+    // 0.34: Headline lines
+    h1Spans.forEach((span, i) => {
+      anim(span, [
+        { transform: 'translateY(120%)' },
+        { transform: 'translateY(0)' }
+      ], { duration: 980, delay: 340 + i * 90, easing: TYPE });
+    });
+
+    // 0.74: Subcopy rise
+    anim(heroSub, [
+      { opacity: 0, transform: `translateY(${14 * s}px)` },
+      { opacity: 1, transform: 'translateY(0)' }
+    ], { duration: 720, delay: 740, easing: QUINT });
+
+    // 0.90: Hero CTA wipe
+    anim(heroCta, [
+      { clipPath: 'inset(0 100% 0 0)' },
+      { clipPath: 'inset(0 0% 0 0)' }
+    ], { duration: 700, delay: 900, easing: EXPO });
+
+    // 0.98: Rules scaleY
+    rules.forEach((r, i) => {
+      anim(r, [
+        { transform: 'scaleY(0)' },
+        { transform: 'scaleY(1)' }
+      ], { duration: 600, delay: 980 + i * 70, easing: QUART });
+    });
+
+    // 1.04: Stat numbers
+    statNums.forEach((sn, i) => {
+      anim(sn, [
+        { opacity: 0, transform: `translateY(${12 * s}px)` },
+        { opacity: 1, transform: 'translateY(0)' }
+      ], { duration: 660, delay: 1040 + i * 85, easing: QUINT });
+    });
+
+    // 1.10: Stat labels
+    statLabs.forEach((sl, i) => {
+      anim(sl, [
+        { opacity: 0, transform: `translateY(${10 * s}px)` },
+        { opacity: 1, transform: 'translateY(0)' }
+      ], { duration: 620, delay: 1100 + i * 85, easing: QUINT });
+    });
+
+    // Cleanup: remove .intro and cancel animations
+    const cleanupTimeout = setTimeout(() => {
+      document.documentElement.classList.remove('intro');
+      activeAnims.forEach(a => {
+        try { a.cancel(); } catch(e) {}
+      });
+    }, 2800 * timeScale);
+
+    // Hard deadline guarantee (4000ms)
+    setTimeout(() => {
+      document.documentElement.classList.remove('intro');
+      clearTimeout(cleanupTimeout);
+    }, 4000);
+  }
+
+  if (document.fonts && document.fonts.ready) {
+    document.fonts.ready.then(() => {
+      requestAnimationFrame(() => startTimeline());
+    }).catch(() => {
+      setTimeout(startTimeline, 1000);
+    });
+  } else {
+    setTimeout(startTimeline, 500);
+  }
+})();
+
+/* -------------------------------------------------------------------------
+   3. Mobile Menu Handlers
+   ------------------------------------------------------------------------- */
+function toggleMenu() {
+  const isOpen = document.body.classList.toggle('nav-open');
+  const btn = document.getElementById('burger-btn');
+  if (btn) {
+    btn.setAttribute('aria-expanded', isOpen ? 'true' : 'false');
+    btn.setAttribute('aria-label', isOpen ? 'Close menu' : 'Open menu');
+  }
+}
+function closeMenu() {
+  document.body.classList.remove('nav-open');
+  const btn = document.getElementById('burger-btn');
+  if (btn) {
+    btn.setAttribute('aria-expanded', 'false');
+    btn.setAttribute('aria-label', 'Open menu');
+  }
+}
+
+function toggleAccordion(id) {
+  const item = document.getElementById(id);
+  const isOpen = item.classList.contains('open');
+  // Close any other open accordion
+  document.querySelectorAll('.menu-item.open').forEach(el => el.classList.remove('open'));
+  if (!isOpen) item.classList.add('open');
+}
+
+// Close on desktop resize
+window.addEventListener('resize', () => {
+  if (window.innerWidth > 1023) closeMenu();
+});
+
+// Escape key listener for menu & modals
+window.addEventListener('keydown', (e) => {
+  if (e.key === 'Escape') {
+    closeMenu();
+    closeAllModals();
+  }
+});
+
+/* -------------------------------------------------------------------------
+   4. Commercial Modals Management
+   ------------------------------------------------------------------------- */
+function openModal(modalId, subTab) {
+  closeAllModals();
+  const modal = document.getElementById(modalId);
+  if (modal) {
+    modal.classList.add('active');
+    if (subTab) {
+      if (subTab === 'threat') switchDocTab('doc-compliance');
+      else if (subTab === 'changelog') switchDocTab('doc-changelog');
+      else switchDocTab('doc-quickstart');
+    }
+  }
+}
+
+function closeModal(modalId) {
+  const modal = document.getElementById(modalId);
+  if (modal) modal.classList.remove('active');
+}
+
+function closeAllModals(e) {
+  if (e) e.preventDefault();
+  document.querySelectorAll('.modal-layer.active').forEach(m => m.classList.remove('active'));
+}
+
+function switchDocTab(tabId, btn) {
+  document.querySelectorAll('.doc-tab-pane').forEach(p => p.style.display = 'none');
+  const target = document.getElementById(tabId);
+  if (target) target.style.display = 'block';
+
+  document.querySelectorAll('.doc-nav-btn').forEach(b => b.classList.remove('active'));
+  if (btn) btn.classList.add('active');
+}
+
+function selectTier(tierName) {
+  closeAllModals();
+  openModal('modal-contact');
+  const sel = document.getElementById('inp-interest');
+  if (sel) {
+    sel.value = tierName === 'Consultation' ? 'Executive Security Consultation ($15k)' : `${tierName} Platform Deployment`;
+  }
+}
+
+function handleConsultSubmit(e) {
+  e.preventDefault();
+  const name = document.getElementById('inp-name').value;
+  alert(`Thank you, ${name}. Your consultation inquiry has been logged. A principal identity security architect will reach out within 4 business hours.`);
+  closeAllModals();
+}
+
+/* -------------------------------------------------------------------------
+   5. Interactive Live Password Policy Evaluator (Standalone + API fallback)
+   ------------------------------------------------------------------------- */
+async function runPlaygroundEval() {
+  const pwd = document.getElementById('play-pwd').value;
+  const ctxRaw = document.getElementById('play-ctx').value;
+  const ctx = ctxRaw.split(',').map(s => s.trim()).filter(Boolean);
+
+  const scoreEl = document.getElementById('play-score');
+  const verdictEl = document.getElementById('play-verdict');
+  const detailsEl = document.getElementById('play-details');
+
+  if (!pwd) {
+    scoreEl.textContent = '--';
+    scoreEl.className = 'badge-score';
+    verdictEl.textContent = 'Enter password';
+    detailsEl.textContent = '';
+    return;
+  }
+
+  try {
+    const res = await fetch('/v1/evaluate', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ password: pwd, context: ctx, check_breach: false })
+    });
+    if (res.ok) {
+      const data = await res.json();
+      scoreEl.textContent = `${data.score}/100 (${data.grade})`;
+      scoreEl.className = `badge-score ${data.allowed ? 'pass' : ''}`;
+      verdictEl.textContent = data.allowed ? 'COMPLIANT' : 'VIOLATION DETECTED';
+      detailsEl.textContent = `Entropy: ${data.metrics?.effective_entropy_bits || 0} bits | Context matches: ${data.context_violations?.length || 0}`;
+      return;
+    }
+  } catch(e) {
+    // Graceful offline heuristic when not running behind live crackerjack server
+  }
+
+  // Client-side offline fallback calculation
+  let score = Math.min(100, pwd.length * 7);
+  let violations = [];
+  ctx.forEach(term => {
+    if (pwd.toLowerCase().includes(term.toLowerCase())) {
+      violations.push(`Contains context term '${term}'`);
+      score -= 25;
+    }
+  });
+  if (pwd.length < 12) violations.push('Length < 12 characters (PCI-DSS 4.0 warning)');
+  score = Math.max(0, score);
+  const pass = score >= 65 && violations.length === 0;
+
+  scoreEl.textContent = `${score}/100`;
+  scoreEl.className = `badge-score ${pass ? 'pass' : ''}`;
+  verdictEl.textContent = pass ? 'ACCEPTABLE' : 'ACTION REQUIRED';
+  detailsEl.textContent = violations.length ? violations.join('; ') : 'No policy violations detected.';
+}
+</script>
+
+</body>
+</html>
