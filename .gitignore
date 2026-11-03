@@ -21,3 +21,7 @@ build/
 # Operating System files
 .DS_Store
 Thumbs.db
+
+# Cloudflare & Wrangler cache
+.wrangler/
+
