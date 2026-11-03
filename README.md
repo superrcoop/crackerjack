@@ -5,6 +5,8 @@
 [![Python 3.11+](https://img.shields.io/badge/python-3.11+-blue.svg)](https://www.python.org/downloads/)
 [![License: GPL v3](https://img.shields.io/badge/License-GPLv3-blue.svg)](https://www.gnu.org/licenses/gpl-3.0)
 [![PyPI](https://img.shields.io/pypi/v/crackerjack-audit.svg)](https://pypi.org/project/crackerjack-audit/)
+[![Cloudflare Pages](https://img.shields.io/badge/Live%20Platform-crackerjack--security.pages.dev-F38020?logo=cloudflare)](https://crackerjack-security.pages.dev)
+[![GitHub Marketplace](https://img.shields.io/badge/Marketplace-Crackerjack%20Action-blue?logo=github)](https://github.com/marketplace/actions/crackerjack-security-secret-auditor)
 [![Code style: black](https://img.shields.io/badge/code%20style-black-000000.svg)](https://github.com/psf/black)
 
 ```
@@ -244,6 +246,30 @@ crackerjack/
 │   ├── test_server.py
 │   └── test_wordlist.py
 └── data/                       # Wordlists & sample dictionaries
+```
+
+---
+
+## 🤖 GitHub Action CI/CD Integration
+
+Crackerjack is available on the **GitHub Marketplace** for automated pull request auditing:
+
+```yaml
+# .github/workflows/security.yml
+name: Crackerjack Security Audit
+on: [push, pull_request]
+
+jobs:
+  audit:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Run Crackerjack Secret & Policy Scanner
+        uses: superrcoop/crackerjack@v3
+        with:
+          path: '.'
+          fail-on-findings: 'true'
+          min-score: '65'
 ```
 
 ---
