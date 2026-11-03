@@ -9,6 +9,7 @@ from pathlib import Path
 from typing import Annotated, Optional
 
 import typer
+from rich.panel import Panel
 
 from crackerjack import __version__
 from crackerjack.auditor import evaluate_password
@@ -20,11 +21,17 @@ from crackerjack.engine import (
     run_benchmark,
 )
 from crackerjack.generator import generate_passphrase
+from crackerjack.honey import generate_honeywords, inject_honey_hash, verify_honeyword
+from crackerjack.hygiene import analyze_crypto_hygiene
+from crackerjack.ledger import calculate_drift, get_audit_history, record_audit
 from crackerjack.models import (
     BreachInfo,
+    HashAuditResult,
+    HoneywordSet,
     PasswordHealthReport,
     TargetCredential,
 )
+from crackerjack.mutator import generate_probabilistic_candidates
 from crackerjack.parsers import auto_detect_and_parse
 from crackerjack.reporter import build_compliance_summary, save_html_report
 from crackerjack.scanner import scan_directory, scan_file
@@ -34,11 +41,15 @@ from crackerjack.ui import (
     create_audit_progress,
     render_audit_results,
     render_benchmark,
+    render_crypto_hygiene,
+    render_drift_history,
+    render_honeyword_set,
     render_passphrase,
     render_password_health,
     render_scan_results,
     show_banner,
 )
+from crackerjack.webhooks import dispatch_webhook
 from crackerjack.wordlist import stream_candidates
 
 app = typer.Typer(
@@ -253,6 +264,22 @@ def audit_command(
         str,
         typer.Option("--format", "-f", help="Credential dump format (auto, shadow, ntds, csv, hash)"),
     ] = "auto",
+    webhook: Annotated[
+        Optional[str],
+        typer.Option("--webhook", help="SIEM or ChatOps webhook URL (Slack, MS Teams, Generic JSON)"),
+    ] = None,
+    webhook_format: Annotated[
+        str,
+        typer.Option("--webhook-format", help="Webhook payload format (generic, slack, teams)"),
+    ] = "generic",
+    track_history: Annotated[
+        bool,
+        typer.Option("--track-history/--no-track-history", help="Record audit snapshot to SQLite ledger for drift analysis"),
+    ] = False,
+    smart_mutations: Annotated[
+        bool,
+        typer.Option("--smart-mutations/--no-smart-mutations", help="Prioritize probabilistic, context-aware mutations before dictionary scan"),
+    ] = False,
 ) -> None:
     """Audit hashes or passwords using multi-core multiprocessing and streaming wordlists."""
     show_banner()
@@ -307,6 +334,19 @@ def audit_command(
 
     # Zero-RAM streaming candidate generator
     candidate_stream = stream_candidates(wordlist, use_rules=rules)
+    if smart_mutations:
+        import itertools
+        all_context_terms = list(_parse_context_terms(context) or [])
+        for c in cred_map.values():
+            all_context_terms.extend(c.context_terms)
+        smart_cands = generate_probabilistic_candidates(
+            base_words=["Password", "Admin", "Welcome"],
+            context_terms=all_context_terms,
+            max_candidates=1500,
+        )
+        candidate_stream = itertools.chain(smart_cands, candidate_stream)
+        console.print("[bold cyan]Smart Mutations:[/bold cyan] Prioritizing context-aware probabilistic variations.")
+
     console.print(f"[dim]Streaming candidate words (rules={'enabled' if rules else 'disabled'}).[/dim]")
 
     engine = MultiCoreAuditEngine(workers=workers)
@@ -340,7 +380,7 @@ def audit_command(
             json.dump(output_data, f, indent=2)
         console.print(f"[green]Audit report saved to {output}[/green]")
 
-    if report:
+    if report or track_history or webhook:
         findings: list[dict] = []
         for r in results:
             cred = cred_map.get(r.target_hash)
@@ -379,8 +419,35 @@ def audit_command(
                 })
 
         summary = build_compliance_summary(findings)
-        save_html_report(summary, report, title="Executive Credential Audit & Compliance Report")
-        console.print(f"[bold green]Executive HTML compliance report saved to {report}[/bold green]")
+
+        history_entries = None
+        if track_history:
+            entry = record_audit(summary, target_name=str(target))
+            console.print(f"[bold cyan]Snapshot recorded to audit ledger (Run #{entry.entry_id}, Score: {entry.overall_score}/100)[/bold cyan]")
+            history_entries = get_audit_history(limit=20)
+        else:
+            existing = get_audit_history(limit=20)
+            if len(existing) >= 2:
+                history_entries = existing
+
+        hygiene_rep = analyze_crypto_hygiene(list(cred_map.values()) if cred_map else target_hashes)
+
+        if report:
+            save_html_report(
+                summary,
+                report,
+                title="Executive Credential Audit & Compliance Report",
+                history=history_entries,
+                hygiene_report=hygiene_rep,
+            )
+            console.print(f"[bold green]Executive HTML compliance report saved to {report}[/bold green]")
+
+        if webhook:
+            notif = dispatch_webhook(webhook, "audit_completed", summary.to_dict(), format_type=webhook_format)
+            if notif.success:
+                console.print(f"[bold green]SIEM / Webhook alert successfully dispatched to {webhook}[/bold green]")
+            else:
+                console.print(f"[yellow]Webhook alert dispatch failed: {notif.error_message}[/yellow]")
 
     any_cracked = any(r.cracked for r in results)
     if any_cracked:
@@ -395,6 +462,9 @@ def _audit_plaintext_file(
     output_path: Optional[Path],
     report_path: Optional[Path] = None,
     context_terms: list[str] | None = None,
+    track_history: bool = False,
+    webhook: Optional[str] = None,
+    webhook_format: str = "generic",
 ) -> None:
     """Batch evaluate plaintext passwords against NIST SP 800-63B and HIBP."""
     reports: list[dict] = []
@@ -437,10 +507,33 @@ def _audit_plaintext_file(
             json.dump(reports, f, indent=2)
         console.print(f"[green]Health audit saved to {output_path}[/green]")
 
-    if report_path:
+    if report_path or track_history or webhook:
         summary = build_compliance_summary(findings)
-        save_html_report(summary, report_path, title="Plaintext Password Governance Report")
-        console.print(f"[bold green]Executive HTML compliance report saved to {report_path}[/bold green]")
+        history_entries = None
+        if track_history:
+            entry = record_audit(summary, target_name="plaintext_batch")
+            console.print(f"[bold cyan]Snapshot recorded to audit ledger (Run #{entry.entry_id}, Score: {entry.overall_score}/100)[/bold cyan]")
+            history_entries = get_audit_history(limit=20)
+        else:
+            existing = get_audit_history(limit=20)
+            if len(existing) >= 2:
+                history_entries = existing
+
+        if report_path:
+            save_html_report(
+                summary,
+                report_path,
+                title="Plaintext Password Governance Report",
+                history=history_entries,
+            )
+            console.print(f"[bold green]Executive HTML compliance report saved to {report_path}[/bold green]")
+
+        if webhook:
+            notif = dispatch_webhook(webhook, "audit_completed", summary.to_dict(), format_type=webhook_format)
+            if notif.success:
+                console.print(f"[bold green]SIEM / Webhook alert successfully dispatched to {webhook}[/bold green]")
+            else:
+                console.print(f"[yellow]Webhook alert dispatch failed: {notif.error_message}[/yellow]")
 
 
 @app.command(name="benchmark")
@@ -569,6 +662,14 @@ def scan_command(
         bool,
         typer.Option("--json", "-j", help="Output scan findings in JSON format"),
     ] = False,
+    webhook: Annotated[
+        Optional[str],
+        typer.Option("--webhook", help="SIEM or ChatOps webhook URL to alert if secrets are found"),
+    ] = None,
+    webhook_format: Annotated[
+        str,
+        typer.Option("--webhook-format", help="Webhook payload format (generic, slack, teams)"),
+    ] = "generic",
 ) -> None:
     """Scan files or repository trees for exposed, weak, or breached credentials in code and configs."""
     target_path = Path(target)
@@ -586,6 +687,22 @@ def scan_command(
     else:
         render_scan_results(findings)
 
+    if findings and webhook:
+        notif = dispatch_webhook(
+            webhook,
+            "secret_detected",
+            {
+                "findings_count": len(findings),
+                "files": list(set(f.file_path for f in findings)),
+                "breached_count": sum(1 for f in findings if f.breached),
+            },
+            format_type=webhook_format,
+        )
+        if notif.success:
+            console.print(f"[bold green]SIEM / Webhook alert successfully dispatched to {webhook}[/bold green]")
+        else:
+            console.print(f"[yellow]Webhook alert dispatch failed: {notif.error_message}[/yellow]")
+
     # Check failure conditions
     has_low_score = any(f.nist_score < fail_under for f in findings)
     has_breached = any(f.breached for f in findings)
@@ -600,4 +717,135 @@ def scan_command(
         console.print(f"[yellow]Scan completed: {len(findings)} secrets detected (passed thresholds).[/yellow]")
     else:
         console.print("[green]Scan completed: No secrets detected.[/green]")
+
+
+@app.command(name="drift")
+@app.command(name="history")
+def drift_command(
+    limit: Annotated[int, typer.Option("--limit", "-n", help="Number of historical runs to display")] = 10,
+    db: Annotated[Optional[Path], typer.Option("--db", help="Path to custom SQLite ledger database")] = None,
+) -> None:
+    """Display continuous compliance drift and health score progression across audit runs."""
+    show_banner()
+    drift = calculate_drift(db_path=db)
+    render_drift_history(drift)
+
+
+@app.command(name="hygiene")
+def hygiene_command(
+    target: Annotated[Path, typer.Argument(help="Path to credential dump, shadow, NTDS, or hash list file")],
+    format: Annotated[str, typer.Option("--format", "-f", help="Format hint (auto, shadow, ntds, csv, hash)")] = "auto",
+) -> None:
+    """Assess cryptographic hygiene, detect deprecated KDF algorithms, and evaluate GPU attack resistance."""
+    show_banner()
+    if not target.exists():
+        console.print(f"[red]Error: Target file not found: {target}[/red]")
+        raise typer.Exit(code=1)
+
+    creds = auto_detect_and_parse(target, format_hint=format)
+    if not creds:
+        raw_lines = _load_lines_from_path(target)
+        creds = [
+            TargetCredential(identity=f"hash_{i}", hash_val=line, hash_type=detect_hash_type(line))
+            for i, line in enumerate(raw_lines, 1)
+        ]
+
+    report = analyze_crypto_hygiene(creds)
+    render_crypto_hygiene(report)
+
+
+@app.command(name="mutate")
+def mutate_command(
+    words: Annotated[str, typer.Option("--words", "-w", help="Comma-separated base dictionary words")] = "Password,Admin,Welcome",
+    context: Annotated[Optional[str], typer.Option("--context", "-C", help="Context terms (organization, department, names)")] = None,
+    count: Annotated[int, typer.Option("--count", "-c", help="Number of probabilistic candidates to generate")] = 100,
+    output: Annotated[Optional[Path], typer.Option("--output", "-o", help="Save generated candidates to a file")] = None,
+) -> None:
+    """Generate high-probability password candidates matching real-world human mutation patterns."""
+    show_banner()
+    base_words = [w.strip() for w in words.split(",") if w.strip()]
+    ctx_terms = _parse_context_terms(context)
+
+    candidates = list(generate_probabilistic_candidates(base_words, context_terms=ctx_terms, max_candidates=count))
+    console.print(f"[bold cyan]Generated {len(candidates)} Probabilistic Candidates:[/bold cyan]")
+    for c in candidates[:20]:
+        console.print(f"  • [green]{c}[/green]")
+    if len(candidates) > 20:
+        console.print(f"  [dim]... and {len(candidates) - 20} more candidates[/dim]")
+
+    if output:
+        output.write_text("\n".join(candidates) + "\n", encoding="utf-8")
+        console.print(f"[bold green]Candidates saved to {output}[/bold green]")
+
+
+honey_app = typer.Typer(name="honey", help="Active Cyber Deception: Honeywords & Canary Tripwires")
+
+
+@honey_app.command(name="generate")
+def honey_generate(
+    password: Annotated[str, typer.Option("--password", "-p", help="Real password for which to generate decoys", prompt=True, hide_input=True)],
+    count: Annotated[int, typer.Option("--count", "-c", help="Total honeyword count (real password + decoys)")] = 5,
+    output: Annotated[Optional[Path], typer.Option("--output", "-o", help="Save HoneywordSet to JSON file for tripwire monitoring")] = None,
+) -> None:
+    """Generate indistinguishable honeywords matching the real password's character pool and entropy."""
+    hset = generate_honeywords(password, count=count)
+    render_honeyword_set(hset)
+    if output:
+        with output.open("w", encoding="utf-8") as f:
+            json.dump(hset.to_dict(), f, indent=2)
+        console.print(f"[bold green]HoneywordSet tripwire definition saved to {output}[/bold green]")
+
+
+@honey_app.command(name="inject")
+def honey_inject(
+    target_type: Annotated[str, typer.Option("--type", "-t", help="Target credential store: shadow, ntds, or sql")] = "shadow",
+    identity: Annotated[str, typer.Option("--identity", "-u", help="Decoy username or service account")] = "admin_backup",
+    hash_val: Annotated[str, typer.Option("--hash", "-H", help="Canary hash string to inject")] = "$2b$12$e8POdGlHFgqWq7GfQ1L46.kIeD5W3hF9qgJ4z7r0u6t5g8v9k3y5e",
+    canary_tag: Annotated[Optional[str], typer.Option("--canary", help="Optional custom canary identifier")] = None,
+) -> None:
+    """Format a canary honey-hash entry for injection into shadow files, Active Directory, or SQL tables."""
+    formatted = inject_honey_hash(target_type, identity, hash_val, canary_tag=canary_tag)
+    console.print(Panel(formatted, title=f"[bold cyan]Decoy {target_type.upper()} Record[/bold cyan]", border_style="cyan"))
+
+
+@honey_app.command(name="verify")
+def honey_verify(
+    input_password: Annotated[str, typer.Option("--input", "-i", help="Candidate password to verify against honeywords", prompt=True, hide_input=True)],
+    file: Annotated[Path, typer.Option("--file", "-f", help="Path to HoneywordSet JSON file")],
+    webhook: Annotated[Optional[str], typer.Option("--webhook", help="SIEM webhook URL to alert if canary tripped")] = None,
+) -> None:
+    """Tripwire verification: Check if an authentication attempt used a decoy honeyword."""
+    if not file.exists():
+        console.print(f"[red]Error: Honeyword file not found: {file}[/red]")
+        raise typer.Exit(code=1)
+
+    with file.open("r", encoding="utf-8") as f:
+        data = json.load(f)
+
+    hset = HoneywordSet(
+        real_password=data["real_password"],
+        honeywords=data["honeywords"],
+        real_index=data["real_index"],
+        decoy_count=data["decoy_count"],
+        avg_entropy_bits=data["avg_entropy_bits"],
+        canary_tag=data["canary_tag"],
+    )
+
+    result = verify_honeyword(input_password, hset)
+    if result["tripped_canary"]:
+        console.print(Panel(result["message"], title="[bold red]CANARY TRIPWIRE ALARM[/bold red]", border_style="red"))
+        if webhook:
+            dispatch_webhook(
+                webhook,
+                "honeyword_tripped",
+                {"canary_tag": hset.canary_tag, "tripped_credential": input_password},
+            )
+        raise typer.Exit(code=2)
+    elif result["authenticated"]:
+        console.print("[bold green]Success:[/bold green] Authentic credential verified.")
+    else:
+        console.print("[yellow]Notice:[/yellow] Incorrect password submitted.")
+
+
+app.add_typer(honey_app, name="honey")
 

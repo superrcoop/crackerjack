@@ -1,6 +1,6 @@
-# Crackerjack 3.2
+# Crackerjack 3.3
 
-> **Enterprise Password Health Auditor, NIST SP 800-63B Compliance Engine & DevSecOps Platform**
+> **Continuous Identity Security, Active Cyber Deception & Compliance Platform**
 
 [![Python 3.11+](https://img.shields.io/badge/python-3.11+-blue.svg)](https://www.python.org/downloads/)
 [![License: GPL v3](https://img.shields.io/badge/License-GPLv3-blue.svg)](https://www.gnu.org/licenses/gpl-3.0)
@@ -13,10 +13,10 @@
  / /   / ___/ __ `/ ___/ //_/ _ \/ ___// / __ `/ ___/ //_/
 / /___/ /  / /_/ / /__/ ,< /  __/ /   / / /_/ / /__/ ,<
 \____/_/   \__,_/\___/_/|_|\___/_/ __/ /\__,_/\___/_/|_|
-                                  /___/      [v3.2.0]
+                                  /___/      [v3.3.0]
 ```
 
-**Crackerjack 3.2** is an enterprise-grade **Password Health Governance, Compliance & DevSecOps Platform** designed for security teams, sysadmins, consultants, and developers. Built from the ground up for modern Python 3.11+, it pairs high-performance **multi-core multiprocessing** with defense-in-depth standards (**NIST SP 800-63B**, **PCI-DSS v4.0**), multi-algorithm KDF support (**Argon2id**, **PBKDF2-HMAC-SHA256**, **Bcrypt**), zero-RAM compressed wordlist streaming, executive HTML reporting, a zero-dependency REST API microservice, and repository secret scanning.
+**Crackerjack 3.3** is a unified **Continuous Identity Security, Active Deception & Credential Compliance Platform** engineered for security engineers, CISOs, penetration testers, and DevSecOps teams. It pairs high-performance **multi-core multiprocessing** with defense-in-depth standards (**NIST SP 800-63B**, **PCI-DSS v4.0**), active cyber deception (**honeywords and canary tripwires**), **historical compliance drift tracking**, automated **SIEM & ChatOps webhooks**, and **cryptographic posture hygiene auditing**.
 
 ---
 
@@ -32,27 +32,30 @@
 
 ## Key Features
 
-- ⚡ **Multi-Core Multi-Algorithm Multiprocessing Engine**: CPU-bound memory-hard password hashing is distributed across all available CPU cores (e.g. Apple Silicon M-series performance and efficiency cores), achieving up to 4x–8x throughput speedups. Auto-detects and audits:
-  - **Argon2** (`$argon2id$`, `$argon2i$`, `$argon2d$`)
-  - **PBKDF2-HMAC-SHA256** (`$pbkdf2-sha256$`, `pbkdf2_sha256$`)
-  - **Bcrypt** (`$2a$`, `$2b$`, `$2y$`)
-- 📊 **Executive HTML Compliance Reports**: Generates standalone single-file audit reports (`--report audit.html`) featuring SVG charts, fleet health scoring, PCI-DSS v4.0 & NIST compliance cards, findings tables, and print-ready CSS for 1-click executive PDF generation.
-- 🚀 **Zero-RAM Compressed Wordlist Streaming**: Stream candidate passwords lazily with an $O(1)$ memory footprint. Native, transparent decompression for:
-  - Plain text (`.txt`, `.dic`, `.words`)
-  - Gzip (`.gz`, e.g. `rockyou.txt.gz`)
-  - Bzip2 (`.bz2`)
-  - Xz/LZMA (`.xz`, `.lzma`)
-- 🛡️ **NIST SP 800-63B Policy & Health Auditor**: Evaluate passwords against official NIST Digital Identity Guidelines:
-  - Enforces minimum length requirements ($\ge 8$ characters, recommended $\ge 15$).
-  - **Context-Specific Dictionary Checks (§5.1.1.2)**: Compares passwords against user details, company names, or service handles (`--context "acme,admin,john.doe"`).
-  - Evaluates raw and effective Shannon information entropy.
-  - Detects keyboard walks (`qwerty`, `12345`), repetition (`aaaa`), and common dictionary roots (including leetspeak).
-  - Computes objective letter grades (**A+**, **A**, **B**, **C**, **D**, **F**) with actionable remediation tips.
-- 🔑 **NIST Multi-Word Passphrase Generator**: Generate cryptographically secure, memorable passphrases using CSPRNG selection (`secrets.choice`) with certified entropy calculation and optional breach pre-checking (`crackerjack generate`).
-- 🌐 **Zero-Dependency REST API Microservice**: Start a high-performance local validation and scoring server with `crackerjack serve`. Features `/v1/validate`, `/v1/evaluate`, `/v1/generate`, `/openapi.json`, and interactive Swagger UI docs.
-- 🔍 **DevSecOps Repository & Config Scanner**: Scan codebases, `.env` files, and YAML/JSON configurations for hardcoded secrets and enforce CI/CD quality gates (`crackerjack scan`).
-- 📁 **Structured Credential Dump Ingestion**: Automatic parsing and context extraction from Linux `/etc/shadow`, Windows Active Directory NTDS.dit (`username:RID:LM:NTLM`), and CSV user lists.
-- 🎨 **Modern Rich Terminal UI**: Colored terminal interface with styled tables, health badges, progress bars, live hash rates ($H/s$), and elapsed timers powered by `typer` and `rich`.
+- 🍯 **Active Cyber Deception (Honeywords & Canary Tripwires)**:
+  - Generate $k-1$ decoy passwords matching a real password's exact length, character pool, and entropy characteristics (`crackerjack honey generate`).
+  - Inject canary honey-hashes into Linux `/etc/shadow`, Windows Active Directory NTDS.dit, or SQL user tables (`crackerjack honey inject`).
+  - Real-time tripwire detection: if an intruder cracks or submits a decoy honeyword, trigger an instant high-priority SIEM alarm (`crackerjack honey verify`).
+- 📈 **Continuous Compliance Drift Ledger**:
+  - SQLite-backed audit ledger (`crackerjack drift` / `crackerjack history`) recording historical audit snapshots, average entropy, and compliance score progression.
+  - Generates SVG trendlines showing fleet security improvement and MTTR over time in executive HTML compliance reports.
+- 📣 **SIEM & ChatOps Webhook Engine**:
+  - Out-of-the-box webhook dispatch for **Slack Block Kit**, **Microsoft Teams MessageCards**, and **Generic JSON SIEMs** with HMAC-SHA256 signature verification (`--webhook <URL> --webhook-format [slack|teams|generic]`).
+- 🧬 **Probabilistic & Context-Aware Mutation Engine**:
+  - Generates realistic candidate password variations modeled on real-world human password construction habits (`crackerjack mutate` / `crackerjack audit --smart-mutations`).
+  - Blends company tokens, quarters, calendar years, seasons, and contextual leetspeak.
+- 🔬 **Cryptographic Hygiene & KDF Modernization Assessment**:
+  - Audit password storage algorithms against modern OWASP and NIST guidelines (`crackerjack hygiene <FILE>`).
+  - Detects deprecated algorithms (MD5, SHA-1, LM, NTLM) and low work factors (Bcrypt rounds $< 12$, PBKDF2 iterations $< 600,000$).
+  - Calculates estimated GPU attack cracking speeds (8x RTX 4090 cluster) and Post-Quantum Cryptography (PQC) readiness.
+  - Automatically outputs a step-by-step migration blueprint to memory-hard **Argon2id**.
+- ⚡ **Multi-Core Multi-Algorithm Multiprocessing Engine**: CPU-bound memory-hard password hashing is distributed across all available CPU cores, achieving 4x–8x throughput speedups. Supports **Argon2id**, **PBKDF2-HMAC-SHA256**, and **Bcrypt**.
+- 📊 **Executive HTML Compliance Reports**: Generates standalone single-file audit reports (`--report audit.html`) featuring SVG donut/bar charts, historical drift trendlines, PCI-DSS v4.0 & NIST compliance cards, cryptographic hygiene tables, and print-ready CSS for 1-click executive PDF export.
+- 🚀 **Zero-RAM Compressed Wordlist Streaming**: Stream candidate passwords lazily with an $O(1)$ memory footprint across plain `.txt`, `.gz` (e.g. `rockyou.txt.gz`), `.bz2`, and `.xz` archives.
+- 🛡️ **NIST SP 800-63B Policy & Health Auditor**: Evaluate passwords against official NIST Digital Identity Guidelines with contextual dictionary blocking (§5.1.1.2) and HaveIBeenPwned k-anonymity breach checking.
+- 🔑 **NIST Multi-Word Passphrase Generator**: Generate cryptographically secure, memorable passphrases with certified entropy calculation (`crackerjack generate`).
+- 🌐 **Zero-Dependency REST API Microservice**: Run high-performance local validation and scoring with `crackerjack serve` and interactive Swagger UI at `/docs`.
+- 🔍 **DevSecOps Repository & Secret Scanner**: Pre-commit hook and directory scanner to detect leaked API tokens, private keys, and passwords before deployment (`crackerjack scan`).
 
 ---
 
@@ -70,99 +73,95 @@ cd crackerjack
 pip install -e .
 ```
 
-Both `crackerjack` and `crackerjack-audit` commands are registered as CLI entrypoints.
-
 ---
 
-## CLI Usage
+## CLI Usage Guide
 
-### 1. Audit Plaintext Password Health (`check`)
-Perform a NIST SP 800-63B health audit and HaveIBeenPwned breach check on a candidate password:
+### 1. Active Cyber Deception & Canary Tripwires (`honey`)
+Generate decoy honeywords, inject canary entries into credential stores, and monitor for unauthorized database dumps:
 
 ```bash
-# Interactive check (prompts securely without echoing)
-crackerjack check
+# 1. Generate 5 honeywords matching a real password's entropy and length
+crackerjack honey generate --password "P@ssw0rd2026!" --count 5 --output tripwire.json
 
-# Check with context-specific dictionary terms (NIST SP 800-63B §5.1.1.2)
-crackerjack check "AcmeCorp2026!" --context "acme,admin,johndoe"
+# 2. Inject a canary record into Linux /etc/shadow or Windows Active Directory
+crackerjack honey inject --type shadow --identity canary_backup
+crackerjack honey inject --type ntds --identity canary_admin --hash 31d6cfe0d16ae931b73c59d7e0c089c0
 
-# Check with masked display
-crackerjack check "Correct-Horse-Battery-Staple-2026!"
-
-# Offline mode (skips HaveIBeenPwned network check)
-crackerjack check "MySecretPassword123" --no-hibp
-
-# Output structured JSON (useful for CI/CD pipelines)
-crackerjack check "Admin2024!" --json
+# 3. Verify an authentication attempt (triggers critical alarm if a honeyword is used!)
+crackerjack honey verify --input "P@ssw0rd2026!" --file tripwire.json
+crackerjack honey verify --input "P@ssw0rd2026!" --file tripwire.json --webhook https://hooks.slack.com/...
 ```
 
 ---
 
-### 2. Multi-Core Hash & Credential Auditing (`audit`)
-Audit lists of hashes, `/etc/shadow` dumps, or Active Directory NTDS extracts with streaming wordlists and generate executive HTML compliance reports:
+### 2. Cryptographic Hygiene & KDF Modernization (`hygiene`)
+Audit password hash algorithms, work factors, and GPU cracking vulnerabilities across dumps:
 
 ```bash
-# Standard hash audit with 8 CPU workers
-crackerjack audit hashes.txt --wordlist rockyou.txt.gz --workers 8
+# Assess cryptographic hygiene of an /etc/shadow or hash list
+crackerjack hygiene /etc/shadow
+crackerjack hygiene ntds_hashes.txt --format ntds
+```
 
-# Generate an Executive HTML Compliance Report
-crackerjack audit hashes.txt --wordlist rockyou.txt.gz --report executive-audit.html
+---
+
+### 3. Continuous Compliance Drift & Audit Ledger (`drift` / `history`)
+Track institutional compliance improvement, MTTR, and health score drift over time:
+
+```bash
+# View historical compliance drift table
+crackerjack drift
+
+# Limit to the last 5 audit runs
+crackerjack drift --limit 5
+```
+
+---
+
+### 4. Multi-Core Hash Auditing with Webhooks & Smart Mutations (`audit`)
+Audit lists of hashes, `/etc/shadow` files, or Active Directory NTDS extracts:
+
+```bash
+# Standard hash audit with 8 CPU workers and SQLite ledger tracking
+crackerjack audit hashes.txt --wordlist rockyou.txt.gz --workers 8 --track-history
+
+# Executive HTML compliance report with historical trendline and Slack webhook alert
+crackerjack audit hashes.txt --wordlist rockyou.txt.gz \
+  --report executive-audit.html \
+  --track-history \
+  --smart-mutations \
+  --webhook https://hooks.slack.com/services/... \
+  --webhook-format slack
 
 # Audit Linux /etc/shadow file with automatic per-account context extraction
 crackerjack audit /etc/shadow --format shadow --wordlist rockyou.txt.gz --report shadow-audit.html
-
-# Audit CSV user export
-crackerjack audit users.csv --format csv --wordlist rockyou.txt.gz
 ```
 
 ---
 
-### 3. Generate NIST-Compliant Passphrases (`generate`)
-Generate memorable, cryptographically strong multi-word passphrases with certified entropy:
+### 5. Probabilistic Context-Aware Password Mutator (`mutate`)
+Generate high-probability candidate passwords modeled on human cognitive habits:
 
 ```bash
-# Default 4-word passphrase with number and breach pre-check
-crackerjack generate
+# Generate 50 candidates combining company name, season, and current year
+crackerjack mutate --words "Acme,Finance" --context "london,admin" --count 50
 
-# 5 words separated by underscores, capitalized, with custom symbol
-crackerjack generate --words 5 --separator "_" --capitalize --symbol
-
-# JSON output for automated provisioning scripts
-crackerjack generate --words 4 --json
+# Save candidates to custom dictionary
+crackerjack mutate --words "MegaCorp" --count 500 --output megacorp_candidates.txt
 ```
 
 ---
 
-### 4. REST API Microservice (`serve`)
-Launch a local, zero-dependency REST API for real-time signup validation and IAM webhook integration:
-
-```bash
-# Start API server on port 8000
-crackerjack serve --host 0.0.0.0 --port 8000
-```
-
-*Endpoints:*
-- `GET /docs`: Interactive Swagger UI documentation
-- `GET /v1/health`: System health status
-- `POST /v1/validate`: Fast boolean validation for user registration/password reset forms
-- `POST /v1/evaluate`: Detailed NIST SP 800-63B audit and entropy analysis
-- `POST /v1/generate`: Passphrase generation with certified entropy
-- `GET /openapi.json`: OpenAPI 3.0 schema
-
----
-
-### 5. DevSecOps Repository Secret Scanner (`scan`)
-Scan repositories, `.env` files, and configuration files for exposed or weak credentials before deployment:
+### 6. DevSecOps Repository Secret Scanner (`scan`)
+Scan repositories, `.env` files, and configuration files for exposed secrets with SIEM alerting:
 
 ```bash
 # Scan current repository
 crackerjack scan .
 
-# Enforce strict CI/CD gate (fail if score < 75 or if any credential is in a breach)
-crackerjack scan . --fail-under 75 --fail-on-breached
-
-# Output findings in JSON
-crackerjack scan . --json
+# Enforce strict CI/CD gate with Slack webhook alerting on findings
+crackerjack scan . --fail-under 75 --fail-on-breached --webhook https://hooks.slack.com/... --webhook-format slack
 ```
 
 #### Pre-Commit Hook Integration
@@ -171,44 +170,30 @@ Add Crackerjack to your `.pre-commit-config.yaml`:
 ```yaml
 repos:
   - repo: https://github.com/superrcoop/crackerjack
-    rev: v3.2.0
+    rev: v3.3.0
     hooks:
       - id: crackerjack-scan
 ```
 
 ---
 
-### 6. Generate Secure Hashes (`hash`)
-Generate cryptographically strong hashes with custom algorithms and cost factors:
+### 7. NIST Multi-Word Passphrase Generator (`generate`)
+Generate memorable, cryptographically strong multi-word passphrases with certified entropy:
 
 ```bash
-# Bcrypt (default, cost rounds 4-31)
-crackerjack hash "mySuperSecretPassphrase" --algo bcrypt --cost 12
-
-# Argon2id (modern memory-hard KDF)
-crackerjack hash "mySuperSecretPassphrase" --algo argon2id --cost 2
-
-# PBKDF2-HMAC-SHA256 (NIST approved key stretching)
-crackerjack hash "mySuperSecretPassphrase" --algo pbkdf2-sha256 --cost 100000
+# 5 words separated by hyphens, capitalized, with number and breach pre-check
+crackerjack generate --words 5 --separator "-" --capitalize --number --breach-check
 ```
 
 ---
 
-### 7. Benchmark Multi-Core CPU Performance (`benchmark`)
-Compare single-core baseline vs multi-core throughput on your machine across algorithms:
+### 8. REST API Microservice (`serve`)
+Launch a local, zero-dependency REST API for real-time validation and IAM integration:
 
 ```bash
-crackerjack benchmark --algo bcrypt --cost 10 --rounds 16
-crackerjack benchmark --algo argon2id --cost 2 --rounds 8
-crackerjack benchmark --algo pbkdf2-sha256 --cost 50000 --rounds 16
+crackerjack serve --host 0.0.0.0 --port 8000
 ```
-
----
-
-### 8. Check Environment & Version (`version`)
-```bash
-crackerjack version
-```
+Interactive Swagger UI documentation is available at `http://localhost:8000/docs`.
 
 ---
 
@@ -217,16 +202,21 @@ crackerjack version
 ```
 crackerjack/
 ├── .pre-commit-hooks.yaml      # Git pre-commit hook definition
-├── pyproject.toml              # Modern PEP 517 build configuration
-├── requirements.txt            # Pinned dependencies
+├── pyproject.toml              # Modern build configuration (v3.3.0)
+├── requirements.txt            # Core dependencies
 ├── src/
 │   └── crackerjack/
-│       ├── __init__.py         # Package version (v3.2.0)
+│       ├── __init__.py         # Package version (v3.3.0)
 │       ├── __main__.py         # python -m crackerjack entry point
-│       ├── cli.py              # Typer command definitions (check, audit, generate, serve, scan)
-│       ├── auditor.py          # NIST SP 800-63B policy grader, context checks & entropy
+│       ├── cli.py              # CLI commands (audit, check, honey, hygiene, drift, mutate, scan, serve)
+│       ├── honey.py            # Active cyber deception (Honeywords & Canary Tripwires)
+│       ├── hygiene.py          # Cryptographic posture & KDF migration analyzer
+│       ├── ledger.py           # SQLite compliance ledger & historical drift tracker
+│       ├── mutator.py          # Probabilistic & context-aware mutation engine
+│       ├── webhooks.py         # SIEM, Slack, and MS Teams webhook dispatcher
+│       ├── auditor.py          # NIST SP 800-63B policy grader & context-specific checks
 │       ├── generator.py        # NIST multi-word passphrase generator (CSPRNG)
-│       ├── reporter.py         # Executive HTML compliance reporter with SVG charts
+│       ├── reporter.py         # Executive HTML compliance reporter with SVG charts & drift graph
 │       ├── server.py           # Zero-dependency REST API microservice (ThreadingHTTPServer)
 │       ├── scanner.py          # DevSecOps repository & config secret scanner
 │       ├── parsers.py          # Structured credential dump parsers (shadow, NTDS, CSV)
@@ -234,9 +224,14 @@ crackerjack/
 │       ├── engine.py           # Multi-core multiprocessing engine (Argon2, PBKDF2, Bcrypt)
 │       ├── wordlist.py         # Zero-RAM streaming loader (.txt, .gz, .bz2, .xz)
 │       ├── rules.py            # Password mutation rules & generators
-│       ├── ui.py               # Rich terminal visual components, tables & panels
+│       ├── ui.py               # Rich terminal visualizations, tables & panels
 │       └── models.py           # Strongly-typed dataclasses
-├── tests/                      # Automated test suite
+├── tests/                      # Automated test suite (76 tests passing)
+│   ├── test_honey.py
+│   ├── test_hygiene.py
+│   ├── test_ledger.py
+│   ├── test_mutator.py
+│   ├── test_webhooks.py
 │   ├── test_auditor.py
 │   ├── test_breach.py
 │   ├── test_cli.py

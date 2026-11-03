@@ -4,8 +4,8 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "crackerjack-audit"
-version = "3.2.0"
-description = "Crackerjack 3.2: Enterprise Password Health Auditor, NIST SP 800-63B Compliance Engine & DevSecOps Platform"
+version = "3.3.0"
+description = "Crackerjack 3.3: Continuous Identity Security, Active Deception & Compliance Platform"
 readme = "README.md"
 authors = [
     { name = "Crackerjack Community" }
@@ -64,3 +64,4 @@ where = ["src"]
 [tool.pytest.ini_options]
 testpaths = ["tests"]
 pythonpath = ["src"]
+addopts = "-p no:anyio"

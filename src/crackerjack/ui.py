@@ -21,8 +21,10 @@ from rich.text import Text
 from crackerjack import __version__
 from crackerjack.models import (
     BenchmarkResult,
+    CryptoHygieneReport,
     GeneratedPassphrase,
     HashAuditResult,
+    HoneywordSet,
     PasswordHealthReport,
     ScanFinding,
 )
@@ -320,4 +322,131 @@ def render_scan_results(findings: list[ScanFinding]) -> None:
         )
 
     console.print(table)
+
+
+def render_drift_history(drift: dict) -> None:
+    """Render historical compliance drift and delta metrics."""
+    history = drift.get("history", [])
+    if not history:
+        console.print(
+            Panel(
+                "[yellow]No historical audits found in ledger.[/yellow]\nRun `crackerjack audit <target> --track-history` to begin tracking.",
+                border_style="yellow",
+                box=box.ROUNDED,
+            )
+        )
+        return
+
+    trend = drift.get("trend", "STABLE")
+    trend_color = "green" if trend == "IMPROVING" else ("red" if trend == "DEGRADING" else "cyan")
+    delta = drift.get("score_delta", 0)
+    delta_str = f"+{delta}" if delta > 0 else str(delta)
+
+    table = Table(
+        title=f"Continuous Compliance Drift Ledger (Trend: [{trend_color}]{trend}[/{trend_color}] | Δ: {delta_str} pts)",
+        box=box.ROUNDED,
+        header_style="bold cyan",
+    )
+    table.add_column("Run ID", justify="right", style="dim")
+    table.add_column("Timestamp", style="cyan")
+    table.add_column("Target Dump", style="bold")
+    table.add_column("Evaluated", justify="right")
+    table.add_column("Broken / Weak", justify="right", style="red")
+    table.add_column("Score", justify="right")
+    table.add_column("Grade", justify="center")
+    table.add_column("PCI-DSS", justify="center")
+
+    for entry in history:
+        badge_style, _ = get_grade_style(entry.overall_grade)
+        pci_badge = "[green]PASS[/green]" if entry.pci_dss_compliant else "[bold red]FAIL[/bold red]"
+        table.add_row(
+            str(entry.entry_id),
+            entry.timestamp,
+            entry.target_name,
+            str(entry.total_evaluated),
+            str(entry.total_broken),
+            f"{entry.overall_score}/100",
+            Text(f" {entry.overall_grade} ", style=badge_style),
+            pci_badge,
+        )
+
+    console.print(table)
+
+
+def render_crypto_hygiene(report: CryptoHygieneReport) -> None:
+    """Render cryptographic posture and KDF hygiene report."""
+    border_color = "red" if "CRITICAL" in report.overall_posture else ("yellow" if "ELEVATED" in report.overall_posture else "green")
+    
+    table = Table(
+        title=f"Cryptographic Posture & KDF Hygiene Analysis ({report.total_hashes} hashes evaluated)",
+        box=box.ROUNDED,
+        header_style="bold magenta",
+    )
+    table.add_column("Algorithm", style="bold cyan")
+    table.add_column("Count", justify="right")
+    table.add_column("Status", justify="center")
+    table.add_column("Risk Level", justify="center")
+    table.add_column("Estimated GPU Cracking Speed", style="dim")
+    table.add_column("NIST & OWASP Migration Guidance", style="yellow")
+
+    for f in report.findings:
+        status_color = "red" if f.status == "deprecated" else ("yellow" if f.status in ("weak", "acceptable") else "green")
+        risk_color = "bold red" if f.risk_level == "CRITICAL" else ("red" if f.risk_level == "HIGH" else ("yellow" if f.risk_level == "MEDIUM" else "green"))
+        table.add_row(
+            f.algorithm,
+            f"{f.count:,}",
+            f"[{status_color}]{f.status.upper()}[/{status_color}]",
+            f"[{risk_color}]{f.risk_level}[/{risk_color}]",
+            f.gpu_cracking_speed,
+            f.recommendation,
+        )
+
+    console.print(
+        Panel(
+            f"[bold {border_color}]{report.overall_posture}[/bold {border_color}]\nDeprecated Hashes Detected: {report.deprecated_count:,} of {report.total_hashes:,}",
+            title="[bold]Fleet Security Posture[/bold]",
+            border_style=border_color,
+            box=box.ROUNDED,
+        )
+    )
+    console.print(table)
+
+    if report.migration_roadmap:
+        roadmap_content = Text()
+        for step in report.migration_roadmap:
+            roadmap_content.append(f"  • {step}\n", style="cyan")
+        console.print(
+            Panel(
+                roadmap_content,
+                title="[bold green]Recommended KDF Modernization Roadmap[/bold green]",
+                border_style="green",
+                box=box.ROUNDED,
+            )
+        )
+
+
+def render_honeyword_set(hset: HoneywordSet) -> None:
+    """Render active deception honeyword set with canary tripwire information."""
+    content = Text()
+    content.append("Active Cyber Deception Canary Generated\n\n", style="bold cyan")
+    content.append(f"Canary Identifier:  ", style="dim")
+    content.append(f"{hset.canary_tag}\n", style="bold yellow")
+    content.append(f"Total Decoys:       {hset.decoy_count}\n", style="dim")
+    content.append(f"Entropy Parity:     {hset.avg_entropy_bits:.1f} bits\n\n", style="dim")
+    content.append("Generated Honeyword Candidates (Decoys + Real Password mixed at random):\n", style="bold")
+
+    for idx, hw in enumerate(hset.honeywords):
+        content.append(f"  [{idx + 1}]  {hw}\n", style="green")
+
+    content.append("\nTripwire Note: ", style="bold red")
+    content.append("If any non-primary honeyword is submitted during authentication or cracked from a stolen dump, an instant SIEM incident alarm is tripped.\n", style="dim")
+
+    console.print(
+        Panel(
+            content,
+            title="[bold magenta]Honeyword Deception Generator[/bold magenta]",
+            border_style="magenta",
+            box=box.ROUNDED,
+        )
+    )
 

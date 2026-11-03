@@ -1,6 +1,6 @@
-"""Crackerjack 3.0: Modern Multi-Core Password Health Auditor & NIST SP 800-63B Compliance Checker."""
+"""Crackerjack 3.3: Continuous Identity Security, Active Deception & Compliance Platform."""
 
-__version__ = "3.2.0"
+__version__ = "3.3.0"
 __author__ = "Crackerjack Community"
 __license__ = "GPL-3.0"
 

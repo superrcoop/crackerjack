@@ -16,7 +16,7 @@ def test_cli_version():
     result = runner.invoke(app, ["version"])
     assert result.exit_code == 0
     assert "Crackerjack Version" in result.output
-    assert "3.1.0" in result.output
+    assert "3.3.0" in result.output
 
 
 def test_cli_hash_bcrypt():
@@ -147,4 +147,36 @@ def test_cli_audit_with_html_report(tmp_path: Path):
     )
     assert report_html.exists()
     assert "<!DOCTYPE html>" in report_html.read_text(encoding="utf-8")
+
+
+def test_cli_drift_command():
+    result = runner.invoke(app, ["drift"])
+    assert result.exit_code == 0
+    assert "Compliance Drift" in result.output or "No historical audits" in result.output
+
+
+def test_cli_mutate_command():
+    result = runner.invoke(app, ["mutate", "--words", "Acme", "--count", "15"])
+    assert result.exit_code == 0
+    assert "Probabilistic Candidates" in result.output
+    assert "Acme" in result.output
+
+
+def test_cli_honey_generate_and_inject():
+    # Test honey inject
+    res_inject = runner.invoke(app, ["honey", "inject", "--type", "shadow", "--identity", "test_canary"])
+    assert res_inject.exit_code == 0
+    assert "test_canary" in res_inject.output
+    assert "cj-canary" in res_inject.output
+
+
+def test_cli_hygiene_command(tmp_path: Path):
+    hashes_file = tmp_path / "dump.txt"
+    hashes_file.write_text("user1:$2b$12$e8POdGlHFgqWq7GfQ1L46.kIeD5W3hF9qgJ4z7r0u6t5g8v9k3y5e\nuser2:31d6cfe0d16ae931b73c59d7e0c089c0\n")
+
+    result = runner.invoke(app, ["hygiene", str(hashes_file)])
+    assert result.exit_code == 0
+    assert "Cryptographic Posture" in result.output
+    assert "NTLM" in result.output
+
 

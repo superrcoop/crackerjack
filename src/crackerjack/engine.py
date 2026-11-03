@@ -16,6 +16,8 @@ import time
 from concurrent.futures import ProcessPoolExecutor, as_completed
 from typing import Callable, Iterable, Iterator, Sequence
 
+from crackerjack.models import BenchmarkResult, HashAuditResult
+
 try:
     import bcrypt
     HAS_BCRYPT = True
@@ -56,6 +58,14 @@ def detect_hash_type(hash_str: str) -> str:
         return "argon2"
     if is_pbkdf2_hash(clean):
         return "pbkdf2"
+    if clean.startswith("$1$"):
+        return "md5crypt"
+    if clean.startswith("$6$"):
+        return "sha512crypt"
+    if clean.startswith("$5$"):
+        return "sha256crypt"
+    if len(clean) == 32 and all(c in "0123456789abcdefABCDEF" for c in clean):
+        return "ntlm"
     return "unknown"
 
 

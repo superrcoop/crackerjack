@@ -259,3 +259,118 @@ class ScanFinding:
             "breach_count": self.breach_count,
         }
 
+
+@dataclass(slots=True)
+class WebhookNotification:
+    """Dispatched alert payload for SIEM, Slack, or MS Teams."""
+    url: str
+    format_type: str  # generic, slack, teams
+    event_type: str  # audit_completed, secret_detected, honeyword_tripped
+    status_code: int = 0
+    success: bool = False
+    error_message: str = ""
+    payload_preview: dict[str, Any] = field(default_factory=dict)
+
+    def to_dict(self) -> dict[str, Any]:
+        return {
+            "url": self.url,
+            "format_type": self.format_type,
+            "event_type": self.event_type,
+            "status_code": self.status_code,
+            "success": self.success,
+            "error_message": self.error_message,
+            "payload_preview": self.payload_preview,
+        }
+
+
+@dataclass(slots=True)
+class HoneywordSet:
+    """Decoy honeywords generated alongside a real password for active deception."""
+    real_password: str
+    honeywords: list[str]
+    real_index: int
+    decoy_count: int
+    avg_entropy_bits: float
+    canary_tag: str
+
+    def to_dict(self) -> dict[str, Any]:
+        return {
+            "real_password": self.real_password,
+            "honeywords": self.honeywords,
+            "real_index": self.real_index,
+            "decoy_count": self.decoy_count,
+            "avg_entropy_bits": round(self.avg_entropy_bits, 2),
+            "canary_tag": self.canary_tag,
+        }
+
+
+@dataclass(slots=True)
+class AuditLedgerEntry:
+    """Historical audit snapshot stored in SQLite for compliance drift tracking."""
+    entry_id: int | None = None
+    timestamp: str = ""
+    target_name: str = ""
+    total_evaluated: int = 0
+    total_broken: int = 0
+    avg_entropy: float = 0.0
+    overall_score: int = 0
+    overall_grade: str = ""
+    nist_compliant_pct: float = 0.0
+    pci_dss_compliant: bool = False
+
+    def to_dict(self) -> dict[str, Any]:
+        return {
+            "entry_id": self.entry_id,
+            "timestamp": self.timestamp,
+            "target_name": self.target_name,
+            "total_evaluated": self.total_evaluated,
+            "total_broken": self.total_broken,
+            "avg_entropy": round(self.avg_entropy, 2),
+            "overall_score": self.overall_score,
+            "overall_grade": self.overall_grade,
+            "nist_compliant_pct": round(self.nist_compliant_pct, 1),
+            "pci_dss_compliant": self.pci_dss_compliant,
+        }
+
+
+@dataclass(slots=True)
+class CryptoHygieneFinding:
+    """Evaluation finding for a specific hashing algorithm in a credential store."""
+    algorithm: str
+    status: str  # deprecated, weak, acceptable, modern
+    count: int
+    risk_level: str  # CRITICAL, HIGH, MEDIUM, LOW
+    gpu_cracking_speed: str
+    pqc_readiness: str
+    recommendation: str
+
+    def to_dict(self) -> dict[str, Any]:
+        return {
+            "algorithm": self.algorithm,
+            "status": self.status,
+            "count": self.count,
+            "risk_level": self.risk_level,
+            "gpu_cracking_speed": self.gpu_cracking_speed,
+            "pqc_readiness": self.pqc_readiness,
+            "recommendation": self.recommendation,
+        }
+
+
+@dataclass(slots=True)
+class CryptoHygieneReport:
+    """Comprehensive cryptographic posture and KDF migration audit."""
+    total_hashes: int
+    overall_posture: str
+    deprecated_count: int
+    findings: list[CryptoHygieneFinding] = field(default_factory=list)
+    migration_roadmap: list[str] = field(default_factory=list)
+
+    def to_dict(self) -> dict[str, Any]:
+        return {
+            "total_hashes": self.total_hashes,
+            "overall_posture": self.overall_posture,
+            "deprecated_count": self.deprecated_count,
+            "findings": [f.to_dict() for f in self.findings],
+            "migration_roadmap": self.migration_roadmap,
+        }
+

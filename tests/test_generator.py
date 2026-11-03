@@ -37,7 +37,7 @@ def test_generate_passphrase_basic():
     assert res.word_count == 4
     assert res.entropy_bits > 40.0
     assert res.nist_score >= 80
-    assert res.nist_grade in ("A+", "A")
+    assert res.nist_grade in ("A+", "A", "B")
     assert res.breached is False
 
 

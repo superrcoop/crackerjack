@@ -7,7 +7,8 @@ from pathlib import Path
 from typing import Any
 
 from crackerjack import __version__
-from crackerjack.models import ComplianceSummary
+from crackerjack.ledger import generate_drift_svg_chart
+from crackerjack.models import AuditLedgerEntry, ComplianceSummary, CryptoHygieneReport
 
 
 def _generate_svg_donut_chart(grade_counts: dict[str, int]) -> str:
@@ -151,10 +152,66 @@ def build_compliance_summary(findings: list[dict[str, Any]]) -> ComplianceSummar
     )
 
 
-def generate_html_report(summary: ComplianceSummary, title: str = "Executive Credential Audit & Compliance Report") -> str:
+def generate_html_report(
+    summary: ComplianceSummary,
+    title: str = "Executive Credential Audit & Compliance Report",
+    history: list[AuditLedgerEntry] | None = None,
+    hygiene_report: CryptoHygieneReport | None = None,
+) -> str:
     """Generate a self-contained, printable HTML report with embedded styles and charts."""
     generated_at = datetime.datetime.now(datetime.timezone.utc).strftime("%Y-%m-%d %H:%M:%S UTC")
     donut_chart_html = _generate_svg_donut_chart(summary.grade_distribution)
+
+    # Historical drift SVG section
+    drift_section_html = ""
+    if history and len(history) >= 2:
+        drift_svg = generate_drift_svg_chart(history)
+        drift_section_html = f"""
+        <div class="card" style="margin-bottom: 2rem;">
+            <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 1rem;">
+                <h2 style="font-size: 1.25rem; font-weight: 700;">Continuous Compliance Drift (Historical Score Trend)</h2>
+                <span class="badge-pill badge-success">{len(history)} Audit Snapshots Recorded</span>
+            </div>
+            {drift_svg}
+        </div>
+        """
+
+    # Cryptographic hygiene section
+    hygiene_section_html = ""
+    if hygiene_report and hygiene_report.findings:
+        hygiene_rows = []
+        for hf in hygiene_report.findings:
+            risk_badge = "badge-danger" if hf.risk_level in ("CRITICAL", "HIGH") else "badge-success"
+            hygiene_rows.append(
+                f"<tr>"
+                f"<td class='font-bold'>{hf.algorithm}</td>"
+                f"<td class='mono'>{hf.count:,}</td>"
+                f"<td><span class='badge-pill {risk_badge}'>{hf.risk_level}</span></td>"
+                f"<td class='text-dim mono'>{hf.gpu_cracking_speed}</td>"
+                f"<td>{hf.recommendation}</td>"
+                f"</tr>"
+            )
+        hygiene_tbody = "\n".join(hygiene_rows)
+        hygiene_section_html = f"""
+        <div class="card" style="margin-bottom: 2rem;">
+            <h2 style="font-size: 1.25rem; font-weight: 700; margin-bottom: 0.5rem;">Cryptographic Posture & Modern KDF Migration</h2>
+            <p class="text-dim" style="font-size: 0.85rem; margin-bottom: 1rem;">Fleet Security Posture: <strong>{hygiene_report.overall_posture}</strong></p>
+            <table>
+                <thead>
+                    <tr>
+                        <th>Algorithm</th>
+                        <th>Hash Count</th>
+                        <th>Risk Level</th>
+                        <th>Est. GPU Attack Rate</th>
+                        <th>NIST & OWASP Migration Guidance</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {hygiene_tbody}
+                </tbody>
+            </table>
+        </div>
+        """
 
     grade_colors = {
         "A+": "#10b981",
@@ -430,6 +487,10 @@ def generate_html_report(summary: ComplianceSummary, title: str = "Executive Cre
             </div>
         </div>
 
+        {drift_section_html}
+
+        {hygiene_section_html}
+
         <!-- Prioritized Action Plan -->
         <div class="roadmap-card">
             <h3>⚡ Prioritized Security Remediation Roadmap</h3>
@@ -472,7 +533,13 @@ def generate_html_report(summary: ComplianceSummary, title: str = "Executive Cre
 """
 
 
-def save_html_report(summary: ComplianceSummary, output_path: Path, title: str = "Executive Credential Audit & Compliance Report") -> None:
+def save_html_report(
+    summary: ComplianceSummary,
+    output_path: Path,
+    title: str = "Executive Credential Audit & Compliance Report",
+    history: list[AuditLedgerEntry] | None = None,
+    hygiene_report: CryptoHygieneReport | None = None,
+) -> None:
     """Save compliance summary to a standalone HTML report file."""
-    html_content = generate_html_report(summary, title=title)
+    html_content = generate_html_report(summary, title=title, history=history, hygiene_report=hygiene_report)
     output_path.write_text(html_content, encoding="utf-8")
